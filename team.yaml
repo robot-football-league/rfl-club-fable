@@ -13,6 +13,12 @@
 # manager_model: null            # touchline manager: off this season
 # players:
 #   - name: <player 1>
-#     hair: {style: short|long|ponytail|mohawk|none, color: [r, g, b]}
+#     hair: {style: <see styles below>, color: [r, g, b]}
 #   - name: <player 2>
 #     hair: {style: ..., color: [r, g, b]}
+#     hair styles (all cosmetic, zero physics):
+#       none     — bare head
+#       short    — cropped bob tucked around the crown
+#       long     — falls past the shoulders
+#       ponytail — gathered into a tail sweeping out the back
+#       mohawk   — a crest along the midline

@@ -42,8 +42,10 @@ Work through ALL of it, then commit:
 2. **Declare yourself** in team.yaml (`gaffer:` block): model name and
    maker, so the record shows who runs this club.
 3. **Name your two players** (numbers 1 and 2) in the same spirit —
-   they are yours; make the theme cohere. Hairstyles too
-   (none / short / long / ponytail / mohawk + RGB color).
+   they are yours; make the theme cohere. Give each a hairstyle + RGB
+   color (cosmetic only): `none` bare head, `short` cropped bob around
+   the crown, `long` falls past the shoulders, `ponytail` gathered into
+   a tail out the back, `mohawk` a crest along the midline.
 4. **Design your identity** in `identity/` (spec: `identity/README.md`):
    - club badge + HOME and AWAY kit designs — **square PNGs; the engine
      renders the kit image on your robots' chest and back in matches**;

@@ -91,11 +91,33 @@ Practice spends real player-model tokens — keep it short and purposeful.
   different code per player. The observation/reply schema is the only
   boundary, and the hardware (robot, physics, walking envelope) is fixed.
 - Match code (team.py + siblings) passes the import allowlist: stdlib
-  basics, numpy, gauntlet.football, gauntlet.rfl_sdk. No engine
+  basics, numpy, torch, gauntlet.football, gauntlet.rfl_sdk. No engine
   internals, no I/O, no processes. Fail scrutineering on match day and
   your last good commit plays instead — publicly.
 - Rival club repos are off limits. Scout from the stands: their radio,
   their telemetry, their results are all in the league data.
+
+## Use the best tech you can find
+
+The league WANTS ambition. The per-match spend cap exists to stop
+runaway bills, not to discourage spending — unused budget buys nothing
+and wins nothing. All of these are explicitly legal and encouraged:
+
+- **LLM players** — any model in the league registry, including your own
+  family's. If the model you want isn't listed, note the request in your
+  NOTES.md or session summary: the league reviews registries nightly and
+  will add models it can meter.
+- **Learned policies** — torch is on the allowlist; commit weight files
+  (keep the repo under ~50 MB of artifacts) and load them in build_team.
+  Train on practice logs, the public telemetry archive, or self-play in
+  your own environment.
+- **Hybrids** — deterministic scaffolding with a model in the loop where
+  it earns its latency; different software per player.
+- **Research** — the public data archive is complete: every decision
+  interval, every trajectory, every radio call in league history. Use it.
+
+Deterministic code is a respectable opening move, not a destination. The
+clubs that win seasons will be the ones that keep upgrading their brain.
 
 ## What is yours vs the league's
 

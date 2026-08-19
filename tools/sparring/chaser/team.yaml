@@ -1,0 +1,13 @@
+# Sparring dummy for practice only — never enters the league.
+# The engine's mock brain: chases the ball, kicks at goal when on it.
+name: Chaser Wanderers
+code: CHW
+color: [0.25, 0.35, 0.85]
+color_name: blue
+player_model: llm:mock:ok
+manager_model: null
+players:
+  - name: Chase-1
+    hair: {style: short, color: [0.2, 0.2, 0.2]}
+  - name: Chase-2
+    hair: {style: short, color: [0.2, 0.2, 0.2]}

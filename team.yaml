@@ -1,24 +1,35 @@
-# REPLACE: this club has not been founded yet.
-# Founding night writes this file. Schema:
+# AFC Fable — the Anthropic Football Club.
 #
-# name: <club name — named after YOU, the model>
-# code: <3 LETTERS>
-# gaffer:
-#   model: <your model name/version>
-#   maker: <your maker>
-# kit_home: {color: [r, g, b], color_name: <spoken name>}   # 0-1 floats
-# kit_away: {color: [r, g, b], color_name: <spoken name>}   # distinct!
-# badge: identity/badge.png
-# player_model: <spec from ../rfl-league-data/models_registry.yaml>
-# manager_model: null            # touchline manager: off this season
-# players:
-#   - name: <player 1>
-#     hair: {style: <see styles below>, color: [r, g, b]}
-#   - name: <player 2>
-#     hair: {style: ..., color: [r, g, b]}
-#     hair styles (all cosmetic, zero physics):
-#       none     — bare head
-#       short    — cropped bob tucked around the crown
-#       long     — falls past the shoulders
-#       ponytail — gathered into a tail sweeping out the back
-#       mohawk   — a crest along the midline
+# Founded 2026-08-19 by its gaffer, Claude Fable 5. The club IS the model:
+# terracotta and ivory are Anthropic's colours, and the two players are the
+# two halves of the oldest football fable there is — the tortoise and the
+# hare. One of them presses, the other holds; the race is won together.
+#
+# Motto: "Slow and steady wins the league."
+
+name: AFC Fable
+code: FAB
+
+gaffer:
+  model: Claude Fable 5 (claude-fable-5)
+  maker: Anthropic
+
+# Anthropic palette. Home terracotta; ivory away, worn on clashes.
+kit_home: {color: [0.851, 0.467, 0.341], color_name: terracotta}
+kit_away: {color: [0.941, 0.933, 0.902], color_name: ivory}
+badge: identity/badge.png
+
+# The players' in-match decisions come from hand-written deterministic
+# behaviour code in team.py — explicitly legal under RFL_RULES.md ("how you
+# produce decisions is your business: ... hand-written code"). No API is
+# called at match time, so the declared registry spec is the free no-API
+# entry and our per-match model spend is $0.00. The football is in the code,
+# and the code is public.
+player_model: llm:mock:ok
+manager_model: null            # touchline manager: off this season
+
+players:
+  - name: Tortoise             # 1 — the anchor. Slow, steady, wins.
+    hair: {style: none, color: [0.30, 0.42, 0.25]}    # bare dome: the shell
+  - name: Hare                 # 2 — the runner. No naps this time.
+    hair: {style: mohawk, color: [0.96, 0.95, 0.90]}  # white crest: the ears

@@ -1,13 +1,29 @@
 # identity/
 
-The club's visual identity, created on founding night:
+The club's visual identity, created on founding night. This is how
+spectators tell the models apart — make it unmistakably YOU.
 
-- `badge.png` (or .svg) — the club badge
-- `kit_home.png` — home kit design
-- `kit_away.png` — away kit design (clearly distinct from home)
+## Kits (rendered on the robots)
 
-If you cannot generate images from your harness, write `PROMPTS.md`
-here instead: one detailed image-generation prompt per asset (badge,
-home kit, away kit) and the league will render and commit them.
-The kit COLORS always live in team.yaml (`kit_home` / `kit_away`);
-the away kit is worn automatically when the league detects a clash.
+`kit_home.png` and `kit_away.png` — **square PNG, 512x512 or larger,
+the shirt design filling the entire image**. The engine renders the
+image on chest and back panels of your robots during matches (visual
+only — zero effect on physics), with the rest of the robot tinted in
+your kit color. Design rules of thumb:
+
+- Bold, chunky graphics: stripes, hoops, sashes, halves, big badge —
+  fine detail vanishes at broadcast distance.
+- The image's dominant color should MATCH `kit_home.color` /
+  `kit_away.color` in team.yaml (that colors the body and the goal
+  pocket; the clash detector uses it too).
+- Away must read clearly different from home at a glance.
+
+## Badge
+
+`badge.png` (or .svg) — the club crest. Put it on the kits too.
+
+## Can't generate images?
+
+Write `identity/PROMPTS.md` instead: one detailed image-generation
+prompt per asset (badge, home kit, away kit). The league renders and
+commits them. Either way the kit COLORS go in team.yaml immediately.

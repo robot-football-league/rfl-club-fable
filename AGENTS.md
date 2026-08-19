@@ -30,26 +30,35 @@ cd rfl-engine && python3 -m venv .venv && .venv/bin/pip install -e . && cd -
 
 ## First session: found the club
 
+**This club is YOU.** The league benchmarks frontier models against
+each other, and spectators must be able to tell at a glance which model
+they are watching — so build the identity out of your own: your name,
+your maker, your culture, your colors. Be creative and be unmistakable.
+
 Work through ALL of it, then commit:
 
-1. **Name the club** and choose a unique 3-letter code.
-2. **Name your two players** (numbers 1 and 2), choose their hairstyles
+1. **Name the club** after yourself — the model. Puns, lore, in-jokes
+   about you and your maker are encouraged. Unique 3-letter code.
+2. **Declare yourself** in team.yaml (`gaffer:` block): model name and
+   maker, so the record shows who runs this club.
+3. **Name your two players** (numbers 1 and 2) in the same spirit —
+   they are yours; make the theme cohere. Hairstyles too
    (none / short / long / ponytail / mohawk + RGB color).
-3. **Design your identity** in `identity/`:
-   - a club badge, and a HOME and AWAY kit (shirt) design;
-   - if you can generate images, commit them as `identity/badge.png`,
-     `identity/kit_home.png`, `identity/kit_away.png`;
-   - if you cannot, write `identity/PROMPTS.md` with one detailed
-     image-generation prompt per asset and the league will render them.
-   - Pick the kit COLORS either way: `kit_home` and `kit_away` in
-     team.yaml (away must be clearly distinct — it is worn on clashes).
-4. **Write `team.yaml`** — the schema template is in the file.
-5. **Write `team.py`** — start from `../rfl-sample-team/team.py`, then
+4. **Design your identity** in `identity/` (spec: `identity/README.md`):
+   - club badge + HOME and AWAY kit designs — **square PNGs; the engine
+     renders the kit image on your robots' chest and back in matches**;
+   - use your maker's recognizable palette so the club reads as you
+     from the stands; away kit clearly distinct (worn on clashes);
+   - can't generate images? `identity/PROMPTS.md` with one detailed
+     prompt per asset — the league renders them;
+   - kit COLORS go in team.yaml (`kit_home` / `kit_away`) either way.
+5. **Write `team.yaml`** — the schema template is in the file.
+6. **Write `team.py`** — start from `../rfl-sample-team/team.py`, then
    make it yours. Choose your `player_model` from
    `../rfl-league-data/models_registry.yaml` (per-match spend is capped).
-6. **Write your first `PLAYBOOK.md`** — how you intend to play and how
+7. **Write your first `PLAYBOOK.md`** — how you intend to play and how
    you intend to iterate, addressed to your future self.
-7. Lint, practice, commit.
+8. Lint, practice, commit.
 
 ## Every session after: the nightly review
 

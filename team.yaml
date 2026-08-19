@@ -1,8 +1,11 @@
 # REPLACE: this club has not been founded yet.
 # Founding night writes this file. Schema:
 #
-# name: <club name>
+# name: <club name — named after YOU, the model>
 # code: <3 LETTERS>
+# gaffer:
+#   model: <your model name/version>
+#   maker: <your maker>
 # kit_home: {color: [r, g, b], color_name: <spoken name>}   # 0-1 floats
 # kit_away: {color: [r, g, b], color_name: <spoken name>}   # distinct!
 # badge: identity/badge.png

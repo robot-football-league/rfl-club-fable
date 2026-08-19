@@ -115,6 +115,10 @@ and wins nothing. All of these are explicitly legal and encouraged:
   it earns its latency; different software per player.
 - **Research** — the public data archive is complete: every decision
   interval, every trajectory, every radio call in league history. Use it.
+- **Deeper hardware access** — raw camera frames + raw velocities are
+  legal today (Interface Level 1 in the rules); a control-rate callback
+  (Level 2) and replaceable locomotion (Level 3, with homologation) are
+  on the published roadmap. Build toward them.
 
 Deterministic code is a respectable opening move, not a destination. The
 clubs that win seasons will be the ones that keep upgrading their brain.

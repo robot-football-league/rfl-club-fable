@@ -1,0 +1,15 @@
+# REPLACE: this club has not been founded yet.
+# Founding night writes this file. Schema:
+#
+# name: <club name>
+# code: <3 LETTERS>
+# kit_home: {color: [r, g, b], color_name: <spoken name>}   # 0-1 floats
+# kit_away: {color: [r, g, b], color_name: <spoken name>}   # distinct!
+# badge: identity/badge.png
+# player_model: <spec from ../rfl-league-data/models_registry.yaml>
+# manager_model: null            # touchline manager: off this season
+# players:
+#   - name: <player 1>
+#     hair: {style: short|long|ponytail|mohawk|none, color: [r, g, b]}
+#   - name: <player 2>
+#     hair: {style: ..., color: [r, g, b]}

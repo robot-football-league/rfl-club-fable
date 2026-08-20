@@ -1,38 +1,62 @@
-"""AFC Fable — the first team, in one file.
+"""AFC Fable — the first team, in one file. v2: interception football.
 
 Two hand-written deterministic players (RFL_RULES.md: "how you produce
-decisions is your business ... hand-written code"). No model API is called
-at match time: every decision is geometry computed from the SDK detections,
-inside a microsecond, never late against the 3 s bridge deadline.
+decisions is your business ... hand-written code"). Decisions are geometry
+computed from the SDK detections in microseconds — never late against the
+3 s bridge.
 
-The shape of the football, learned the hard way in founding-night practice:
+v2 is the round-1 post-mortem made executable. We lost 6-7 at home with
+BETTER territory and possession; all seven concessions fell into four
+repeatable failures, each now a named protocol:
 
-  CONTESTED ball (an opponent is on it): both players join as a WEDGE —
-      two push vectors at split angles beat one fair duel. 2v2 football is
-      won and lost in the shoving.
-  FREE ball: the nearer player takes it; the other plays OUTLET ahead of
-      the play in their half (a swarm has no defenders — breakthroughs are
-      collected in front of an empty net) or BACKSTOP behind the play in
-      ours (second balls, clearances).
-  OUR BOX: the last defender's job is the SHOT LINE, not the duel — plant
-      the body where the ball's path crosses the mouth, then poke clear.
+  CHASE-FROM-BEHIND (3 goals, incl. both own goals): a ball rolling at our
+      net was chased, never cut off. Now: a fitted ball-physics model —
+      exponential speed decay, tau = 2.2 s, measured from round-1 free-roll
+      telemetry — predicts where the ball's path crosses our goal line and
+      whether it even rolls that far. The player who can reach the crossing
+      point sooner LINE-BLOCKS (walk to the crossing, body on the line);
+      the other harasses the ball. Nobody chases a lost race from behind.
+  MOUTH SCRUMS (2 own goals): go_to_ball wants a stance BETWEEN ball and
+      our net — in a crowded mouth that walk is own-goal roulette. Now: in
+      our mouth band, the near player clears ALONG the end wall to a wing
+      (lateral stance, never net-side) and the far player plugs the near
+      post. Defensive walks detour around the ball (never barge through).
+  BLIND SEARCH (1 goal): the ball sat 6 s in our box while a player walked
+      to the CENTRE SPOT to look for it. Now: a private last-known-ball
+      memory (15 s) steers the search; if the ball was last seen deep in
+      our half, the anchor covers the post BEFORE hunting.
+  CORNER GRINDS (2 goals): our-corner defence joined the shove with
+      net-side stances. Now: near player digs along the side wall, far
+      player plugs the post on the ball's side — physically blocking the
+      along-the-end-wall path both corner goals took.
 
-Role assignment is time-to-ball with hysteresis; #2 Hare wins dead heats
-(attack-biased), #1 Tortoise anchors. The radio is honest natural language,
-spoken only on real transitions, in each player's fable voice.
+Also new: CORNER-RAM awareness. The rams fire after 4.5 s of slow ball in
+a 1.5 x 1.6 m corner zone and sweep it diagonally infield (hard enough to
+topple a robot). In THEIR corners we stop joining four-body grinds: one
+digs, the other collects the eject from MIDFIELD — depth discipline, not
+doorstep poaching; the one time both of us committed deep, a single punt
+sailed past the pair of us for a goal. In ours, the post-plug stands
+clear of the panel stroke.
 
-Everything here sits ON the engine's public skill contract: go_to_ball /
-kick_toward approach the correct side of the ball, orbit rather than barge,
-and repair stances at walls. This layer decides WHO goes, WHERE to aim,
-and WHERE the off-ball player stands.
+(The referee dropped-ball is DISABLED in this engine build —
+REFEREE_DROP_DEFAULT = False — so founding night's centre-camp play is
+deleted, not tuned.)
 
-Engine notes (rfl-0.3, verified in practice logs):
-  - obs["you"]["defend_goal_xy"] reports the WRONG end for the home team
-    (obs_for passes a team index where a robot index is expected), so our
-    own goal is derived as the mirror of attack_goal_xy. Public obs, same
-    for every club.
-  - A ball pinned >8 s teleports to the centre spot (referee drop): when
-    the count runs high, the off-ball player camps the drop.
+Roles stay time-to-ball with hysteresis; #2 Hare wins dead heats, #1
+Tortoise anchors. Kickoffs are a 2v2 wedge (it kept winning the first
+shove), shrunk to a 4 s window so discipline resumes sooner. The radio is
+honest natural language, one line per real transition, in each player's
+fable voice.
+
+Engine facts this file relies on (verified 2026-08-19/20):
+  - obs["you"]["defend_goal_xy"] is WRONG for the home team (team index
+    passed where a robot index is expected) -> our goal = mirror of
+    attack_goal_xy.
+  - Ball speed decays ~exp(-t / 2.2 s): a ball at v m/s rolls ~2.2*v m.
+  - Corner rams: 4.5 s arming, zone 1.5 m (end) x 1.6 m (side), fires
+    only while ball speed < 0.5; panel stroke 0.65 m, diagonal infield.
+  - walk_to path-plans around ROBOTS only — it will happily barge through
+    the ball (go_to_ball/kick_toward orbit it; walk_to does not).
 """
 
 import math
@@ -42,7 +66,12 @@ PITCH_X = 7.0            # goal lines at x = +-7
 PITCH_Y = 4.5            # side walls at y = +-4.5
 GOAL_HALF_W = 1.6        # goal mouth |y| < 1.6
 WALK_MPS = 0.7           # planning estimate of cruise speed
+REACT_S = 0.35           # decision-to-motion latency allowance
 FALL_OUT_S = 8.0         # a fallen robot is out this long
+BALL_TAU_S = 2.2         # fitted speed-decay constant (round-1 telemetry)
+
+CORNER_X = PITCH_X - 1.5     # ram zone reach from the end wall
+CORNER_Y = PITCH_Y - 1.6     # ... and from the side wall
 
 SAY_GAP_S = 12.0         # self-imposed radio discipline (engine floor is 10)
 
@@ -55,6 +84,50 @@ def _clip(v, lo, hi):
     return lo if v < lo else hi if v > hi else v
 
 
+def _roll(bxy, vel, t):
+    """Ball position after t seconds under exponential speed decay."""
+    k = BALL_TAU_S * (1.0 - math.exp(-t / BALL_TAU_S))
+    return (bxy[0] + vel[0] * k, bxy[1] + vel[1] * k)
+
+
+def _meet(me, bxy, vel):
+    """Earliest (t, point) where I can be where the ball will be."""
+    t = 0.0
+    while t <= 6.0:
+        p = _roll(bxy, vel, t)
+        if _d(me, p) <= WALK_MPS * max(0.0, t - REACT_S):
+            return t, p
+        t += 0.25
+    return 6.0, _roll(bxy, vel, 6.0)
+
+
+def _cross_our_line(bxy, vel, ogx, asign, driven=False):
+    """(t, y) where the ball's path crosses our goal line — or None if the
+    roll dies first or it isn't heading in. A DRIVEN ball (an opponent
+    within a stride, sustaining it — how both round-1 dribbled goals came)
+    doesn't decay: project at constant velocity instead."""
+    line_x = ogx + asign * 0.45
+    if vel[0] * (-asign) < 0.12:
+        return None
+    if bxy[0] * asign < line_x * asign:         # already behind the line
+        return None
+    need = abs(line_x - bxy[0])
+    if driven:
+        t = need / abs(vel[0])
+        if t > 9.0:
+            return None
+        return t, bxy[1] + vel[1] * t
+    total = abs(vel[0]) * BALL_TAU_S            # x-distance the roll can cover
+    if total <= need:
+        return None
+    frac = need / total
+    if frac >= 0.999:
+        return None
+    t = -BALL_TAU_S * math.log(1.0 - frac)
+    y = bxy[1] + vel[1] * BALL_TAU_S * frac
+    return t, y
+
+
 # Radio voice: honest tactical calls in each player's fable voice.
 LINES = {
     "Tortoise": {
@@ -62,10 +135,12 @@ LINES = {
         "take":     "Mine — slow and steady.",
         "leave":    "Yours, Hare — I'll hold the line.",
         "wedge":    "Shoulder to shoulder — push with me.",
+        "line":     "I'll cut it off — stay on the ball.",
+        "post":     "Near post is mine. Force it wide.",
+        "ram":      "Ram's arming — I've got the bounce.",
         "goal_for": "The moral so far: patience scores.",
         "goal_against": "A lesson, not a defeat. Reset and go again.",
         "down":     "I'm down — eight seconds. Hold the fort, Hare.",
-        "camp":     "Referee's counting — I'll take the drop at centre.",
         "solo":     "You rest — I'll carry us till you're up.",
     },
     "Hare": {
@@ -73,10 +148,12 @@ LINES = {
         "take":     "Mine! No naps today.",
         "leave":    "All yours, Tortoise — dropping back.",
         "wedge":    "Two of us now — heave!",
+        "line":     "I'll race it to the line — you press!",
+        "post":     "Post covered — dig it out!",
+        "ram":      "Ram's about to fire — feeding on the bounce.",
         "goal_for": "Fast AND finished this time!",
         "goal_against": "They won't outrun us twice. Again.",
         "down":     "Legs gone — eight seconds. Yours, Tortoise!",
-        "camp":     "Drop ball coming — I'm on the centre spot.",
         "solo":     "I've got both ends till you're back up.",
     },
 }
@@ -94,8 +171,8 @@ class FablePlayer:
 
     # ------------------------------------------------------------ lifecycle
     def begin_episode(self, log_dir=None):
-        self.t0_rem = None          # first-seen time_remaining_s
-        self.t = 0.0                # elapsed match seconds (from remaining)
+        self.t0_rem = None
+        self.t = 0.0
         self.role = "attack" if self.attack_biased else "cover"
         self.mate_xy = None
         self.mate_seen_t = -1e9
@@ -106,6 +183,8 @@ class FablePlayer:
         self.say_ok_t = -1e9
         self.last_line = ""
         self.score_prev = None
+        self.ball_mem = None        # (xy, t) our OWN long memory, ~15 s
+        self.ball_mem_t = -1e9
 
     # ---------------------------------------------------------------- radio
     def _say(self, reply, key):
@@ -117,6 +196,38 @@ class FablePlayer:
         self.last_line = line
         return reply
 
+    # ------------------------------------------------------------- helpers
+    def _safe_target(self, me, target, bxy):
+        """A walk_to waypoint that will not barge through the ball: walk_to
+        A*-avoids robots but NOT the ball, and shoving the ball while
+        crossing our box is exactly how own goals happen. If the straight
+        leg passes within 0.65 m of the ball, detour perpendicular."""
+        if bxy is None:
+            return target
+        ax, ay = me
+        tx, ty = target
+        vx_, vy_ = tx - ax, ty - ay
+        L2 = vx_ * vx_ + vy_ * vy_
+        if L2 < 1e-9:
+            return target
+        u = ((bxy[0] - ax) * vx_ + (bxy[1] - ay) * vy_) / L2
+        if u <= 0.0 or u >= 1.0:
+            return target
+        px_, py_ = ax + u * vx_, ay + u * vy_
+        if _d((px_, py_), bxy) >= 0.65:
+            return target
+        L = math.sqrt(L2)
+        nx, ny = -vy_ / L, vx_ / L               # unit normal
+        side = 1.0 if (bxy[0] - px_) * nx + (bxy[1] - py_) * ny < 0 else -1.0
+        wx = _clip(px_ + nx * side * 1.0, -PITCH_X + 0.4, PITCH_X - 0.4)
+        wy = _clip(py_ + ny * side * 1.0, -PITCH_Y + 0.4, PITCH_Y - 0.4)
+        return (wx, wy)
+
+    def _walk(self, me, target, bxy=None):
+        tx, ty = self._safe_target(me, target, bxy) if bxy else target
+        return {"skill": "walk_to", "target": [round(float(tx), 2),
+                                               round(float(ty), 2)]}
+
     # ----------------------------------------------------------------- main
     def decide(self, obs):
         det = obs.get("detections") or {}
@@ -124,16 +235,11 @@ class FablePlayer:
         me = obs["self"]["field_xy"]
         you = obs["you"]
         gx = float(you["attack_goal_xy"][0])
-        # NOT obs defend_goal_xy — see module docstring: wrong for the home
-        # team in rfl-0.3. The pitch is symmetric; our goal is the mirror.
-        ogx = -gx
+        ogx = -gx            # engine's defend_goal_xy is wrong for the home team
         asign = 1.0 if gx > 0 else -1.0
         score = obs.get("score") or {}
         rem = float(obs.get("time_remaining_s", 0.0))
-        ref = obs.get("referee") or {}
-        stuck_s = float(ref.get("ball_stuck_s", 0.0))
 
-        # -- clock: derive an increasing elapsed time from the countdown
         if self.t0_rem is None:
             self.t0_rem = rem
         self.t = self.t0_rem - rem
@@ -157,29 +263,47 @@ class FablePlayer:
             self.mate_xy = tuple(mates[0]["field_xy"])
             self.mate_seen_t = self.t
 
-        # -- fallen: nothing to do but say so once and wait -----------------
+        # -- fallen ---------------------------------------------------------
         if obs["self"].get("fallen"):
             reply = {"skill": "hold"}
             if not self.self_down_said:
                 self.self_down_said = True
-                self.say_ok_t = -1e9        # a fall is worth interrupting for
+                self.say_ok_t = -1e9
                 self._say(reply, "down")
             return reply
         self.self_down_said = False
 
-        # -- restart detection: ball at centre, still, me at a kickoff spot -
+        # -- ball memory (ours, longer than the SDK's 6 s) -------------------
         bxy = tuple(ball["field_xy"]) if ball else None
         bspeed = float(ball.get("speed_mps", 0.0)) if ball else 0.0
+        if ball is not None and float(ball.get("age_s", 9.0)) < 2.0:
+            self.ball_mem, self.ball_mem_t = bxy, self.t
+
+        # -- sight discipline. The camera is a 120-degree panoramic lens,
+        #    not 360: a remembered ball OUTSIDE that cone is invisible and
+        #    REAL — look at it before doing anything else. A remembered
+        #    ball INSIDE the cone that still isn't seen is genuinely gone.
+        #    (Both players once spun in blind sweeps with the ball 0.7 m
+        #    behind them; a goal followed. Bearing is in the detection.)
+        if ball is not None and not ball.get("seen_now"):
+            brg = abs(float(ball.get("bearing_deg", 0.0)))
+            age_ = float(ball.get("age_s", 0.0))
+            if brg > 55.0 and age_ > 1.0:
+                reply = {"skill": "turn_to",
+                         "target": [round(bxy[0], 2), round(bxy[1], 2)]}
+                return self._say(reply, goal_line) if goal_line else reply
+            if brg <= 55.0 and age_ > 1.5 and _d(me, bxy) < 2.5:
+                ball, bxy = None, None
+
+        # -- restart detection ----------------------------------------------
         if (bxy is not None and _d(bxy, (0.0, 0.0)) < 0.4 and bspeed < 0.2
                 and 2.0 < abs(me[0]) < 3.0 and 0.7 < abs(me[1]) < 1.7):
-            if self.t > self.kickoff_until:      # a fresh restart
+            if self.t > self.kickoff_until:
                 self.kickoff_said = False
-            self.kickoff_until = self.t + 6.0
+            self.kickoff_until = self.t + 4.0
         kickoff_play = (self.t < self.kickoff_until and bxy is not None
                         and _d(bxy, (0.0, 0.0)) < 1.2)
 
-        # -- kickoff: both press as a wedge with split aims — the centre
-        #    duel is 2v2 and we don't concede the first shove.
         if kickoff_play:
             split = 0.5 if self.number == 1 else -0.5
             reply = {"skill": "kick_toward", "target": [gx, split]}
@@ -190,46 +314,45 @@ class FablePlayer:
                 return self._say(reply, "kickoff")
             return reply
 
-        # -- a remembered ball at my feet that I plainly can't see is GONE --
-        if (ball is not None and not ball.get("seen_now")
-                and float(ball.get("age_s", 0.0)) > 1.5
-                and _d(me, bxy) < 1.2):
-            ball, bxy = None, None
-
-        # -- ball unknown: search without leaving my job. The anchor faces
-        #    midfield from home (that is where balls come from); the runner
-        #    goes to the centre spot and sweeps.
+        # -- ball unknown: hunt the LAST KNOWN point, guard the goal first --
         if ball is None:
-            if self.attack_biased:
-                spot = (0.0, 0.0)
+            mem_ok = (self.t - self.ball_mem_t) < 15.0 and self.ball_mem
+            if mem_ok:
+                mx, my_ = self.ball_mem
+                deep = asign * mx < -(PITCH_X - 3.0)
+                if deep and not self.attack_biased:
+                    post = (ogx + asign * 0.55,
+                            _clip(my_, -(GOAL_HALF_W - 0.15),
+                                  GOAL_HALF_W - 0.15))
+                    if _d(me, post) > 0.5:
+                        reply = self._walk(me, post)
+                    else:
+                        reply = {"skill": "turn_to",
+                                 "target": [round(mx, 2), round(my_, 2)]}
+                elif _d(me, (mx, my_)) > 1.4:
+                    reply = self._walk(me, (mx, my_))
+                else:
+                    reply = {"skill": "turn_to"}
             else:
-                spot = (ogx + asign * 1.35, 0.0)
-            if _d(me, spot) > 1.0:
-                reply = {"skill": "walk_to",
-                         "target": [round(spot[0], 2), round(spot[1], 2)]}
-            elif self.attack_biased:
-                reply = {"skill": "turn_to"}     # sweep for the magenta ball
-            else:
-                reply = {"skill": "turn_to", "target": [0.0, 0.0]}
+                spot = ((0.0, 0.0) if self.attack_biased
+                        else (ogx + asign * 1.35, 0.0))
+                reply = (self._walk(me, spot) if _d(me, spot) > 1.0
+                         else {"skill": "turn_to"})
             return self._say(reply, goal_line) if goal_line else reply
 
         age = float(ball.get("age_s", 0.0))
         if age > 3.0:
-            bspeed = 0.0                          # don't lead a ghost
+            bspeed = 0.0
         vel = ball.get("velocity_mps") or [0.0, 0.0]
+        if age > 3.0:
+            vel = [0.0, 0.0]
         bx, by = bxy
 
-        # -- a remembered ball I should plainly see isn't there: reacquire --
-        if not ball.get("seen_now") and age > 2.0 and _d(me, bxy) < 2.2:
-            reply = {"skill": "turn_to", "target": [round(bx, 2), round(by, 2)]}
-            return self._say(reply, goal_line) if goal_line else reply
-
-        # -- game state -----------------------------------------------------
+        # -- shared state ---------------------------------------------------
         opps = det.get("opponents") or []
-        contested = any(_d(o["field_xy"], bxy) < 1.1 for o in opps)
         mate_down = self.t < self.mate_down_until
         mate_known = (self.t - self.mate_seen_t) < 6.0 and self.mate_xy
-        my_t = _d(me, bxy) / WALK_MPS
+        my_t = _meet(me, bxy, vel)[0]
         if mate_down:
             mate_t = 1e9
         elif mate_known:
@@ -238,53 +361,112 @@ class FablePlayer:
             mate_t = my_t + (0.001 if not self.attack_biased else -0.001)
         bias = -0.45 if self.role == "attack" else 0.45
         if abs(my_t - mate_t) < 0.25:
-            attack = self.attack_biased           # dead heat: fable order
+            attack = self.attack_biased
         else:
             attack = (my_t + bias) < mate_t
         role_was = self.role
         self.role = "attack" if attack else "cover"
+        i_am_near = my_t <= mate_t
 
-        # danger = anywhere the next touch can put it in: a 3 m radius of our
-        # goal centre (covers the wall channels that feed the mouth), plus
-        # the mouth band itself a little further out
-        in_our_box = (_d(bxy, (ogx, 0.0)) < 3.0
-                      or (asign * bx < -(PITCH_X - 2.4)
-                          and abs(by) < GOAL_HALF_W + 0.9))
-        rolling_in = bspeed > 0.35 and vel[0] * (-asign) > 0.2
+        our_mouth = (asign * bx < -(PITCH_X - 1.6)
+                     and abs(by) <= GOAL_HALF_W + 0.4)
+        our_corner = (asign * bx < -CORNER_X and abs(by) > CORNER_Y)
+        their_corner = (asign * bx > CORNER_X and abs(by) > CORNER_Y)
+        # threat = a ball that will actually arrive at our line soon, in our
+        # half. Scoped tight: an over-eager version of this put the whole
+        # team in permanent retreat and ceded the entire attacking third.
+        driven = any(_d(o["field_xy"], bxy) < 1.0 for o in opps)
+        threat = None
+        if bspeed > 0.45 and asign * bx < 0.0:
+            threat = _cross_our_line(bxy, vel, ogx, asign, driven=driven)
+            if threat is not None and threat[0] > 5.0:
+                threat = None
 
-        # -- pick the job ---------------------------------------------------
-        if attack:
+        say_key = None
+
+        # ==== OUR MOUTH: clear along the end wall / plug the near post =====
+        if our_mouth:
+            if i_am_near and not (mate_down and _d(me, bxy) > 1.6):
+                wing = 1.0 if by >= 0 else -1.0
+                reply = {"skill": "kick_toward",
+                         "target": [0.0, wing * (PITCH_Y - 0.6)]}
+            else:
+                post_y = (GOAL_HALF_W - 0.12) * (1.0 if by >= 0 else -1.0)
+                post = (ogx + asign * 0.5, post_y)
+                if _d(me, post) < 0.45:
+                    reply = {"skill": "turn_to",
+                             "target": [round(bx, 2), round(by, 2)]}
+                else:
+                    reply = self._walk(me, post, bxy)
+                say_key = "post"
+
+        # ==== OUR CORNER: dig along the side wall / plug the post ==========
+        elif our_corner:
+            if i_am_near and not (mate_down and _d(me, bxy) > 1.6):
+                wing = 1.0 if by >= 0 else -1.0
+                reply = {"skill": "kick_toward",
+                         "target": [0.0, wing * (PITCH_Y - 0.6)]}
+            else:
+                post_y = (GOAL_HALF_W - 0.10) * (1.0 if by >= 0 else -1.0)
+                post = (ogx + asign * 0.5, post_y)
+                if _d(me, post) < 0.45:
+                    reply = {"skill": "turn_to",
+                             "target": [round(bx, 2), round(by, 2)]}
+                else:
+                    reply = self._walk(me, post, bxy)
+                say_key = "post"
+
+        # ==== THREAT: the ball's roll crosses our line — cut it off ========
+        elif threat is not None:
+            t_cross, y_cross = threat
+            y_cross = _clip(y_cross, -(GOAL_HALF_W - 0.10), GOAL_HALF_W - 0.10)
+            line_pt = (ogx + asign * 0.5, y_cross)
+            # full stride on the line race (walk_to bursts ~0.85-1.0 aligned),
+            # and a late body on the line still beats none: dribbles stall
+            my_line = _d(me, line_pt) / 0.85
+            mate_line = (_d(self.mate_xy, line_pt) / 0.85
+                         if mate_known and not mate_down else 1e9)
+            t_meet, meet_pt = _meet(me, bxy, vel)
+            if my_line <= mate_line and my_line < t_cross + 2.5:
+                # I take the line: be standing on the crossing point
+                if _d(me, line_pt) < 0.4:
+                    reply = {"skill": "turn_to",
+                             "target": [round(bx, 2), round(by, 2)]}
+                else:
+                    reply = self._walk(me, line_pt, bxy)
+                say_key = "line"
+            elif t_meet < t_cross:
+                reply = {"skill": "go_to_ball",
+                         "lead_s": round(_clip(t_meet, 0.0, 2.0), 2)}
+            else:
+                reply = {"skill": "go_to_ball"}
+
+        elif attack:
             reply = self._on_ball(me, bxy, bspeed, vel, ball, opps, gx, asign)
-        elif in_our_box or (rolling_in and asign * bx < 0.0):
-            reply = self._shot_line(me, bxy, bspeed, vel, ogx, asign)
-        elif contested and not mate_down:
-            reply = self._wedge(me, bxy, gx, asign)
         else:
-            reply = self._off_ball(me, bxy, bspeed, opps, ogx, gx, asign,
-                                   score, rem, stuck_s, mate_down, my_t,
-                                   mate_t)
+            reply, say_key = self._off_ball(me, bxy, bspeed, vel, opps, ogx,
+                                            gx, asign, score, rem, mate_down,
+                                            my_t, mate_t, their_corner)
 
         # -- separation: never shoulder my own teammate ---------------------
         if (not attack and mates and _d(me, self.mate_xy) < 1.1
                 and _d(me, bxy) > 1.5):
             ax_, ay_ = me[0] - self.mate_xy[0], me[1] - self.mate_xy[1]
             n = math.hypot(ax_, ay_) or 1.0
-            reply = {"skill": "walk_to",
-                     "target": [round(_clip(me[0] + ax_ / n * 1.2,
-                                            -PITCH_X + 0.5, PITCH_X - 0.5), 2),
-                                round(_clip(me[1] + ay_ / n * 1.2,
-                                            -PITCH_Y + 0.5, PITCH_Y - 0.5), 2)]}
+            reply = self._walk(me, (_clip(me[0] + ax_ / n * 1.2,
+                                          -PITCH_X + 0.5, PITCH_X - 0.5),
+                                    _clip(me[1] + ay_ / n * 1.2,
+                                          -PITCH_Y + 0.5, PITCH_Y - 0.5)))
 
         # -- blocked far from the ball: sidestep out of the shove -----------
         if obs["self"].get("blocked") and _d(me, bxy) > 1.15:
             ux, uy = bx - me[0], by - me[1]
             n = math.hypot(ux, uy) or 1.0
-            side = 1.0 if me[1] > 0 else -1.0     # step toward mid-pitch
-            reply = {"skill": "walk_to",
-                     "target": [round(_clip(me[0] - uy / n * 0.9 * side,
-                                            -PITCH_X + 0.5, PITCH_X - 0.5), 2),
-                                round(_clip(me[1] + ux / n * 0.9 * side,
-                                            -PITCH_Y + 0.5, PITCH_Y - 0.5), 2)]}
+            side = 1.0 if me[1] > 0 else -1.0
+            reply = self._walk(me, (_clip(me[0] - uy / n * 0.9 * side,
+                                          -PITCH_X + 0.5, PITCH_X - 0.5),
+                                    _clip(me[1] + ux / n * 0.9 * side,
+                                          -PITCH_Y + 0.5, PITCH_Y - 0.5)))
 
         tgt = reply.get("target")
         if isinstance(tgt, list):
@@ -295,10 +477,8 @@ class FablePlayer:
             return self._say(reply, goal_line)
         if mate_down and "down" not in self.last_line:
             return self._say(reply, "solo")
-        if reply.get("_wedge"):
-            reply.pop("_wedge", None)
-            return self._say(reply, "wedge")
-        reply.pop("_wedge", None)
+        if say_key:
+            return self._say(reply, say_key)
         if self.role != role_was:
             return self._say(reply, "take" if attack else "leave")
         return reply
@@ -308,13 +488,16 @@ class FablePlayer:
         bx, by = bxy
         goal = (gx, 0.0)
         d_goal = _d(bxy, goal)
-        on_wall = bool(ball.get("against_wall"))
 
-        # our own corner pocket: don't push at our goal — clear down the wing
-        if on_wall and asign * bx < -(PITCH_X - 1.4) and abs(by) > GOAL_HALF_W:
-            wing = 1.0 if by > 0 else -1.0
+        # their mouth band: ram it straight through
+        if asign * bx > PITCH_X - 1.6 and abs(by) <= GOAL_HALF_W + 0.3:
             return {"skill": "kick_toward",
-                    "target": [0.0, wing * (PITCH_Y - 0.5)]}
+                    "target": [gx, _clip(by, -1.1, 1.1)]}
+
+        # their corner: dig it toward the mouth along the end wall
+        if asign * bx > CORNER_X and abs(by) > CORNER_Y:
+            return {"skill": "kick_toward",
+                    "target": [gx, (1.0 if by >= 0 else -1.0)]}
 
         # shooting range: place the shot at the corner the keeper isn't in
         if d_goal < 3.4:
@@ -325,7 +508,8 @@ class FablePlayer:
                 if dk < best:
                     best, keeper = dk, o
             if keeper is not None:
-                aim_y = (GOAL_HALF_W - 0.5) * (-1.0 if keeper["field_xy"][1] >= 0
+                # 0.6 margin: the ball is 0.35 m — tighter aims clip the post
+                aim_y = (GOAL_HALF_W - 0.6) * (-1.0 if keeper["field_xy"][1] >= 0
                                                else 1.0)
             return {"skill": "kick_toward", "target": [gx, aim_y]}
 
@@ -344,91 +528,79 @@ class FablePlayer:
                         "target": [_clip(bx + asign * 3.5, -5.9, 5.9),
                                    side * 2.7]}
 
-        # open field: a modest lead to intercept a crossing ball — but never
-        # overrun it. Founding-night practice measured aggressive leads
-        # putting the striker goal-side, pushing the ball BACKWARD (-5 m of
-        # net advance). Close in, or with the ball already rolling the right
-        # way, play it where it is and let the stance geometry do the work.
+        # open field: intercept at the measured meet time, executed through
+        # the CLOSED-LOOP skill (go_to_ball re-solves its lead every control
+        # step; an open-loop walk_to a predicted point stops dead and loses
+        # the ball — measured: it ceded the whole attacking third). Never
+        # lead a ball already rolling goalward with me behind it (that
+        # overrun cost -5 m of contact advance on founding night, and two
+        # own goals in round 1).
+        t_meet, meet_pt = _meet(me, bxy, vel)
         lead = 0.0
-        d_me = _d(me, bxy)
-        if bspeed > 0.35 and d_me > 2.0:
-            lead = _clip(0.45 * d_me / WALK_MPS, 0.3, 1.2)
+        if bspeed > 0.35 and _d(me, bxy) > 2.0:
+            # the skill projects linearly (no decay), so cap the horizon to
+            # keep its aim error inside a body width
+            lead = _clip(t_meet, 0.3, 1.6)
         ux, uy = me[0] - bx, me[1] - by
         n = math.hypot(ux, uy) or 1.0
-        if (vel[0] * ux + vel[1] * uy) / n > 0.15:   # rolling at me
+        if (vel[0] * ux + vel[1] * uy) / n > 0.15:
             lead = min(lead, 0.4)
-        if vel[0] * asign > 0.2:                     # already goalward
+        if vel[0] * asign > 0.2:
             lead = 0.0
         if lead > 0.0:
             return {"skill": "go_to_ball", "lead_s": round(lead, 2)}
         return {"skill": "go_to_ball"}
 
-    # ------------------------------------------------- the wedge (2v2 duel)
-    def _wedge(self, me, bxy, gx, asign):
-        """Join a contested duel as the second pusher, at a split angle so
-        we arrive shoulder-to-shoulder, never in each other's stance."""
-        split = 0.8 if self.number == 1 else -0.8
-        return {"skill": "kick_toward", "target": [gx, split], "_wedge": True}
-
-    # ------------------------------------------- last defender: shot line
-    def _shot_line(self, me, bxy, bspeed, vel, ogx, asign):
-        bx, by = bxy
-        line_x = ogx + asign * 0.55
-        if _d(me, bxy) < 1.35 or (bspeed < 0.15 and _d(me, bxy) < 2.1):
-            return {"skill": "go_to_ball"}       # close enough: poke it clear
-        y_block = by
-        if abs(vel[0]) > 0.05:
-            t_hit = (line_x - bx) / vel[0]
-            if 0.0 < t_hit < 6.0:
-                y_block = by + vel[1] * t_hit
-        return {"skill": "walk_to",
-                "target": [line_x, _clip(y_block, -(GOAL_HALF_W - 0.1),
-                                         GOAL_HALF_W - 0.1)]}
-
     # ----------------------------------------------- off the ball (free)
-    def _off_ball(self, me, bxy, bspeed, opps, ogx, gx, asign, score, rem,
-                  stuck_s, mate_down, my_t, mate_t):
+    def _off_ball(self, me, bxy, bspeed, vel, opps, ogx, gx, asign, score,
+                  rem, mate_down, my_t, mate_t, their_corner):
         bx, by = bxy
 
-        # dropped ball incoming: be the one standing at the centre spot
-        near_our_goal = asign * bx < -(PITCH_X - 2.6)
-        if stuck_s > 5.0 and _d(bxy, (0.0, 0.0)) > 0.7 and not near_our_goal:
-            reply = {"skill": "walk_to", "target": [-asign * 1.1, 0.0]}
-            return self._say(reply, "camp")
+        # their corner with the ball slow: the ram is arming. Collect the
+        # eject from the MIDFIELD side, not the corner's doorstep — round 1
+        # scored us two corner goals with the digger alone, and the one
+        # time both players committed deep, a punt sailed past them both
+        # for a goal. Depth discipline pays better than doorstep poaching.
+        if their_corner and bspeed < 0.5:
+            spot = (asign * 2.3, (1.0 if by >= 0 else -1.0) * 1.3)
+            if _d(me, spot) < 0.5:
+                return ({"skill": "turn_to",
+                         "target": [round(bx, 2), round(by, 2)]}, "ram")
+            return (self._walk(me, spot, bxy), "ram")
 
         # clear and present danger: engage and clear (skills aim goalward)
+        near_our_goal = asign * bx < -(PITCH_X - 2.6)
         if _d(me, bxy) < 2.3 or (near_our_goal and (mate_down
                                                     or mate_t > my_t + 1.2)):
-            return {"skill": "go_to_ball"}
+            return ({"skill": "go_to_ball"}, None)
 
-        two_up = score and score.get("you", 0) - score.get("them", 0) >= 2
-        cautious = two_up and rem < 120.0
+        # we lost round 1 from 6-5 up with 43 s left: any lead in the final
+        # stretch pulls the anchor onto the keeper's arc
+        lead_n = (score.get("you", 0) - score.get("them", 0)) if score else 0
+        cautious = (lead_n >= 2 and rem < 120.0) or (lead_n >= 1 and rem < 70.0)
 
-        # free ball in their half: OUTLET ahead of the play to collect
-        # breakthroughs — but with anchor discipline: never so deep that one
-        # long punt strands me (walking home costs ~1.4 s per metre)
+        # free ball in their half: OUTLET ahead of the play, depth-capped
         if asign * bx > 0.5 and not cautious:
             out_x = _clip(bx + asign * 2.3, -PITCH_X + 0.8, PITCH_X - 0.8)
             if asign * out_x > 2.0:
                 out_x = asign * 2.0
-            return {"skill": "walk_to",
-                    "target": [out_x, _clip(by * 0.4, -2.2, 2.2)]}
+            return (self._walk(me, (out_x, _clip(by * 0.4, -2.2, 2.2)), bxy),
+                    None)
 
         # free ball in our half: BACKSTOP on the ball-to-goal line, shifted
-        # a stride sideways — covering the clearance lane without standing
-        # in the attacker's push-through
+        # a stride toward mid-pitch, out of the attacker's lane
         if not cautious:
             og = (ogx, 0.0)
             lx, ly = og[0] - bx, og[1] - by
             n = math.hypot(lx, ly) or 1.0
-            px_, py_ = -ly / n, lx / n            # perpendicular unit
+            px_, py_ = -ly / n, lx / n
             if abs(by + py_ * 0.9) > abs(by - py_ * 0.9):
-                px_, py_ = -px_, -py_             # offset toward mid-pitch
-            return {"skill": "walk_to",
-                    "target": [_clip(bx + lx / n * 2.3 + px_ * 0.9,
-                                     -PITCH_X + 0.7, PITCH_X - 0.7),
-                               _clip(by + ly / n * 2.3 + py_ * 0.9,
-                                     -PITCH_Y + 0.7, PITCH_Y - 0.7)]}
+                px_, py_ = -px_, -py_
+            tgt = (_clip(bx + lx / n * 2.3 + px_ * 0.9,
+                         -PITCH_X + 0.7, PITCH_X - 0.7),
+                   _clip(by + ly / n * 2.3 + py_ * 0.9,
+                         -PITCH_Y + 0.7, PITCH_Y - 0.7))
+            return (self._walk(me, tgt, bxy), None)
 
         # protecting a lead late: keeper's arc between ball and our net
         og = (ogx, 0.0)
@@ -438,8 +610,9 @@ class FablePlayer:
         hy = _clip(og[1] + uy / n * 1.35, -(GOAL_HALF_W - 0.15),
                    GOAL_HALF_W - 0.15)
         if _d(me, (hx, hy)) < 0.35:
-            return {"skill": "turn_to", "target": [bx, by]}
-        return {"skill": "walk_to", "target": [hx, hy]}
+            return ({"skill": "turn_to", "target": [round(bx, 2),
+                                                    round(by, 2)]}, None)
+        return (self._walk(me, (hx, hy), bxy), None)
 
 
 def build_team(ctx):

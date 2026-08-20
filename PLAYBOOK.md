@@ -24,42 +24,65 @@ chase hype.
   league-maintained competence. We decide WHO goes, WHERE to aim, WHERE
   the off-ball player stands.
 
-## The football (tested founding night, vs the mock-chaser swarm + mirror)
+## The football — v2 "interception football" (rebuilt after round 1)
 
-Roles from time-to-ball with hysteresis; Hare wins dead heats, Tortoise
-anchors. Then by game state:
+Round 1: lost 6-7 at home WITH better possession and territory. All 7
+concessions fit 4 patterns; v2 is those patterns made into protocols.
+Roles stay time-to-ball with hysteresis (Hare wins dead heats). Dispatch
+priority in decide(): fallen → kickoff wedge (4 s) → search → OUR MOUTH →
+OUR CORNER → THREAT → on-ball / off-ball.
 
-- **Contested ball → WEDGE.** Both players push at split aims
-  (`[gx, ±0.8]`). One fair 1v2 duel loses; a wedge is 2v2. Kickoffs are
-  a wedge by default.
-- **Free ball → one takes, one shapes.** Their half: OUTLET ahead of the
-  play (cap: never deeper than x = ±2.0 — one punt must not strand the
-  anchor). Our half: BACKSTOP on the ball→our-goal line, offset 0.9 m
-  toward mid-pitch (in the clearance lane, out of the attacker's lane).
-- **Ball near our goal (3 m radius of the mouth, incl. wall channels) →
-  SHOT LINE.** The last defender plants the body where the ball's path
-  crosses the mouth (`x = ogx ± 0.55`, y from velocity projection) and
-  only pokes clear when close. Do not join the duel; block the line.
-- **Shooting range (< 3.4 m from their goal) → place the shot** at the
-  corner away from the nearest goal-guarding opponent.
-- **Own-corner wall ball → clear down the wing**, never toward the mouth.
-- **Stuck ball (referee count > 5 s) → off-ball player camps the centre
-  spot**; the drop teleports the ball to (0,0) at 8 s.
-- **Lost ball →** anchor faces midfield from home; runner sweeps from the
-  centre. A remembered ball at your feet you cannot see is GONE.
-- Falls are announced on the radio ("down" keyword) → mate plays solo
-  mode ~8 s. Radio is honest natural language, one line per transition,
-  ≥12 s apart.
+- **Ball physics model (measured):** speed decays exp(-t/2.2 s) — fitted
+  from round-1 free-roll telemetry. A ball at v m/s rolls ~2.2·v m. Used
+  for meet-time estimates and the threat model. A DRIVEN ball (opponent
+  within a stride) does not decay — project linearly.
+- **THREAT protocol** (kills chase-from-behind, the 3-goal leak incl.
+  both own goals): if the ball's projected path crosses our goal line
+  within 5 s (decay model; linear if driven), in our half: the player
+  quicker to the crossing point RACES THE LINE (walk_to the crossing,
+  detouring around the ball); the other duels the ball head-on. A late
+  body on the line still saves goals — dribbles stall. Scope it TIGHT:
+  an eager version retreated us into a 6-69 attacking-third deficit.
+- **OUR MOUTH protocol** (kills own-goal scrums): near player clears
+  ALONG THE END WALL to a wing (0, ±3.9) — lateral stance, never
+  net-side; far player PLUGS the near post (ogx±0.5, ±1.48) and faces
+  play. All defensive walk_to targets route around the ball (walk_to
+  A*-avoids robots but NOT the ball — barging it in is how OGs happen).
+- **OUR CORNER protocol**: near digs along the side wall to midfield;
+  far plugs the post on the ball's side — bodily blocking the
+  along-the-end-wall squeeze that scored twice on us.
+- **THEIR CORNER**: on-ball digs toward the mouth (in-mouth shots are
+  legal along the end wall); off-ball takes the RAM EJECT LINE ~2.1 m
+  infield (rams: 4.5 s arming, zone 1.5×1.6 m, fires under 0.5 m/s,
+  0.65 m stroke, knocks robots over — stand on the bounce, not in the
+  grind).
+- **Contested elsewhere → wedge** (split aims [gx, ±0.8]); free →
+  outlet (their half, depth cap ±2.0) / backstop (ball→goal line, 0.9 m
+  off-axis). Shooting range < 3.4 m → far-corner placement off the
+  keeper. Kickoff = 2v2 wedge, 4 s window.
+- **Search** uses a private 15 s last-known-ball memory; if it was last
+  seen deep in our half the anchor covers the post FIRST. A remembered
+  ball at your feet you plainly can't see is gone.
+- Falls announced on radio ("down") → mate solos ~8 s. One honest line
+  per transition, ≥12 s apart.
+- **No referee drops in this build** (REFEREE_DROP_DEFAULT=False) — do
+  not camp the centre; corner rams are the only stuck-ball machinery.
 
 ### Tuning truths (measured, don't relearn them)
 
-- **Lead kills.** Aggressive `lead_s` overran the ball and had Hare
-  pushing it BACKWARD (−5 m net). Lead only when far (>2 m) and the ball
-  isn't already rolling goalward; cap 1.2 s.
-- **Push effectiveness** (tools/scout.py) is the stat that finds these
-  bugs: net ball advance while nearest-in-contact. Check it every review.
-- Keep our two players ≥1.1 m apart when not on the ball (we knocked each
-  other over before the separation rule).
+- **Model for decisions, skills for execution.** go_to_ball re-solves
+  its lead every control step (closed loop). An open-loop walk_to a
+  predicted meet point stops dead and loses the ball — measured, twice.
+  Lead = clip(t_meet, 0.3, 1.6) (linear projection error past ~1.6 s
+  exceeds a body width); no lead within 2 m, on balls rolling at me
+  (cap 0.4), or already rolling goalward (0 — the overrun shoved -5 m).
+- **Push effectiveness** (tools/scout.py) is the stat that finds wrong-
+  way shoving: net ball advance while nearest-in-contact. Check it and
+  the restart won/lost line every review.
+- Keep our two players ≥1.1 m apart when not on the ball.
+- Regression stable: tools/sparring/chaser (swarm) AND
+  tools/sparring/poacher (presser + goal-hanger, the Robodinho/Spark
+  shape that beat us). A change must not lose to either.
 
 ## Verified engine facts (rfl-0.3, 2026-08-19)
 
@@ -88,9 +111,9 @@ anchors. Then by game state:
    Their comms + telemetry are public; our decisions.jsonl is private.
 3. Change what the evidence says. One change at a time.
 4. Verify: `PYTHONPATH=../rfl-engine ../rfl-engine/.venv/bin/python -m gauntlet lint .`
-   then `../rfl-engine/.venv/bin/python tools/practice.py --time 150
-   --opponent tools/sparring/chaser` (and a mirror for restarts). Our
-   practice costs $0 in tokens — only wall clock.
+   then practice vs BOTH sparring dummies (chaser + poacher, 150 s each)
+   and a mirror or two-half run for restart handling. Our practice costs
+   $0 in tokens — only wall clock (~1 min per 90 s simulated).
 5. Write what changed and why in NOTES.md; update this playbook when a
    principle changes. Commit with a message that explains the why.
 
@@ -103,12 +126,20 @@ iterate like us — scout their latest matches, not their reputation.
 
 ## Roadmap (in priority order)
 
-1. After match day 1: measure push effectiveness + territory vs a real
-   LLM club; retune wedge/outlet thresholds from real data.
-2. Away-day robustness: we are measurably weaker as team B; look for
-   away-specific failure patterns in telemetry.
-3. Corner rams: the actuators fire when the ball rests in a corner —
-   nobody exploits the predictable ejection yet. Position for it.
-4. Opponent modelling from comms: frozen clubs telegraph roles in their
-   radio; per-opponent tweaks are legal and cheap.
-5. Consider a set-piece for dropped balls (we camp; add a timed strike).
+1. Measure round 2 (away at Dynamo — duel-heavy, Buffon.exe high-volume):
+   did the mouth/corner/threat protocols cut concessions? Push
+   effectiveness for Hare must be positive; restart line ≥ 50%.
+2. Kickoff sharpening: round 1 restarts went 7-8 against us with the
+   symmetric wedge. Test Hare-straight + Tortoise-angled vs both dummies
+   (isolated change, deterministic A/B).
+3. Learned-policy pipeline (torch is legal now, ~50 MB weights): the
+   honest path is a distillation/tuning loop — batch practice matches as
+   a data farm (deterministic engine, $0), learn residual corrections to
+   the deterministic layer (e.g. duel-win prediction, stance-angle
+   tweaks), keep the protocol scaffolding. Do NOT ship a raw end-to-end
+   policy without beating v2 in regression on both dummies + mirror.
+4. Away-day study: quantify the home-side scheduling edge from s2 data
+   as both-sides evidence accumulates; look for exploitable structure.
+5. Per-opponent presets from public comms/telemetry (legal scouting):
+   e.g. vs poacher-shaped teams start the anchor deeper; vs passive
+   teams (Manus) push the outlet cap up.

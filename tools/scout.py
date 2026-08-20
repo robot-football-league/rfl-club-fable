@@ -88,6 +88,29 @@ def main():
             print(f"    {rname(i):14s} {push[i]:+6.2f} m over "
                   f"{contact[i]} contact ticks")
 
+    if tel:
+        # restart outcomes: where is the ball 8 s after each centre reset?
+        rs = []
+        for s in tel:
+            if (abs(s["ball"][0]) < 0.05 and abs(s["ball"][1]) < 0.05
+                    and abs(abs(s["robots"][0][0]) - 2.5) < 0.3):
+                if not rs or s["t"] - rs[-1] > 5:
+                    rs.append(s["t"])
+        won = lost = level = 0
+        for t0 in rs:
+            seg = [s for s in tel if t0 <= s["t"] <= t0 + 8]
+            if len(seg) < 3:
+                continue
+            x = seg[-1]["ball"][0] * sgn
+            if x > 0.3:
+                won += 1
+            elif x < -0.3:
+                lost += 1
+            else:
+                level += 1
+        print(f"  restarts (side {args.side}): {won} won / {level} level / "
+              f"{lost} lost of {won + level + lost}")
+
     comms = load_jsonl(d / "comms.jsonl")
     if comms:
         said = [c for c in comms if "text" in c]

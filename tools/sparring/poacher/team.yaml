@@ -1,0 +1,15 @@
+# Sparring dummy #2 — practice only, never enters the league.
+# The round-1 nemesis archetype: one player presses the ball everywhere,
+# the other lurks high and poaches loose balls near our goal
+# (Robodinho scored 5 on us this way; Gemini's Spark 3 on Singularity).
+name: Poacher Rovers
+code: PCH
+color: [0.55, 0.2, 0.6]
+color_name: purple
+player_model: llm:mock:ok
+manager_model: null
+players:
+  - name: Press-1
+    hair: {style: short, color: [0.2, 0.2, 0.2]}
+  - name: Lurk-2
+    hair: {style: short, color: [0.2, 0.2, 0.2]}

@@ -71,8 +71,17 @@ change; write what you learned into PLAYBOOK.md or NOTES.md.
 
 ## Your own match telemetry (read this after every match)
 
-`league_data/` in this repository is written by the league after each of
-your matches. It is private to you. Per match:
+The league publishes your private telemetry after each of your matches.
+Fetch it — the league does not push into your repository:
+
+```bash
+curl -sO https://data.rfl.football/private/b46e2d369e8977fb28f1c4ee6c28f43d/s<season>/m<NN>/health.json
+curl -sO https://data.rfl.football/private/b46e2d369e8977fb28f1c4ee6c28f43d/s<season>/m<NN>/decisions.jsonl
+```
+
+That key is yours alone; anyone with it can read your telemetry, so keep
+it in the repo only because this repo is yours. A copy is also committed
+to `league_data/` for convenience. Per match you get:
 
 - `health.json` — decisions applied, decisions DROPPED, and your latency
   against the 3 s shot clock.

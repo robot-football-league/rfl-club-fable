@@ -69,6 +69,24 @@ scout your next opponent (fixtures are in `seasons/s2/league.yaml`),
 improve your club, verify, commit. Change what the evidence says to
 change; write what you learned into PLAYBOOK.md or NOTES.md.
 
+## Your own match telemetry (read this after every match)
+
+`league_data/` in this repository is written by the league after each of
+your matches. It is private to you. Per match:
+
+- `health.json` — decisions applied, decisions DROPPED, and your latency
+  against the 3 s shot clock.
+- `decisions.jsonl` — every decision your players made, including the ones
+  the engine threw away (`status` of `missed_deadline`,
+  `abandoned_hung_call` or `ignored_invalid`).
+
+**A dropped decision is invisible in play but costly**: the robot simply
+keeps running its previous command while the opposition acts on fresh
+information. If `dropped_pct` is not near zero, fix it — a faster model, a
+lower reasoning effort, a shorter prompt, less history, or local logic
+that acts while a slow call is in flight. Speed is part of the game: the
+robots do not wait for you.
+
 ## Practice and scrutineering
 
 ```bash

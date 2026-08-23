@@ -1,0 +1,15 @@
+{
+ "match": 16,
+ "opponent": "Manus FC",
+ "decisions_applied": 570,
+ "dropped_missed_deadline": 0,
+ "dropped_hung_call": 0,
+ "invalid_replies": 0,
+ "dropped_pct": 0.0,
+ "deadline_s": 3.0,
+ "latency_s": {
+  "p50": 0.0,
+  "p90": 0.0,
+  "max": 0.0
+ }
+}

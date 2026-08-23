@@ -1,9 +1,30 @@
-"""AFC Fable — the first team, in one file. v2: interception football.
+"""AFC Fable — the first team, in one file. v3: the talking team.
 
 Two hand-written deterministic players (RFL_RULES.md: "how you produce
 decisions is your business ... hand-written code"). Decisions are geometry
 computed from the SDK detections in microseconds — never late against the
-3 s bridge.
+3 s bridge (league health.json: 0 dropped decisions in four matches).
+
+v3's structural change, from the round-2..5 private telemetry: my players
+were two ISOLATED cameras. 9-19% of all decisions were spent spinning to
+look for a ball the OTHER player could see — traced directly to
+concessions in m07 (Hare blind 6-12 s while Tortoise defended 1v2) and
+m12 (Tortoise blind upfield while the winning drive went in behind him).
+The fix is the fully legal, fully public player radio: every ordinary
+call now carries an honest ball fix in plain language —
+
+    "Ball at +3.1, -2.4, rolling at our net — I'll cut the line."
+
+— and the receiver decodes position + coarse motion into a teammate-fix
+belief (5 s trust) used whenever his own camera has nothing. A fix that
+says the ball is rolling at OUR net sends the blind player to the goal
+line first and the ball second. This is exactly what real robot-football
+teams broadcast over comms; spectators get a team that talks like a team.
+
+Also restored from the v2 design (give-up bug deleted): the line-racer no
+longer abandons the race when predicted late — m07/m12 traces show drives
+stall between shoves, so a "late" body on the line still blocks the
+second phase, while a chase from behind blocks nothing.
 
 v2 is the round-1 post-mortem made executable. We lost 6-7 at home with
 BETTER territory and possession; all seven concessions fell into four
@@ -60,6 +81,7 @@ Engine facts this file relies on (verified 2026-08-19/20):
 """
 
 import math
+import re
 
 # Pitch facts (docs/RFL_RULES.md; obs["field"] agrees at runtime).
 PITCH_X = 7.0            # goal lines at x = +-7
@@ -73,7 +95,8 @@ BALL_TAU_S = 2.2         # fitted speed-decay constant (round-1 telemetry)
 CORNER_X = PITCH_X - 1.5     # ram zone reach from the end wall
 CORNER_Y = PITCH_Y - 1.6     # ... and from the side wall
 
-SAY_GAP_S = 12.0         # self-imposed radio discipline (engine floor is 10)
+SAY_GAP_S = 10.2         # just over the engine's 10 s cooldown: every slot
+                         # the rules allow now carries a ball fix
 
 
 def _d(a, b):
@@ -128,16 +151,13 @@ def _cross_our_line(bxy, vel, ogx, asign, driven=False):
     return t, y
 
 
-# Radio voice: honest tactical calls in each player's fable voice.
+# Radio voice. v3: the radio is a WORLD MODEL CHANNEL first and a
+# personality second. Ordinary calls carry an honest ball fix — position
+# and motion in plain language — exactly the callout a sighted teammate
+# owes a blind one. Event lines (goals, falls) keep their fable voice.
 LINES = {
     "Tortoise": {
         "kickoff":  "Steady from the whistle — I've got our half.",
-        "take":     "Mine — slow and steady.",
-        "leave":    "Yours, Hare — I'll hold the line.",
-        "wedge":    "Shoulder to shoulder — push with me.",
-        "line":     "I'll cut it off — stay on the ball.",
-        "post":     "Near post is mine. Force it wide.",
-        "ram":      "Ram's arming — I've got the bounce.",
         "goal_for": "The moral so far: patience scores.",
         "goal_against": "A lesson, not a defeat. Reset and go again.",
         "down":     "I'm down — eight seconds. Hold the fort, Hare.",
@@ -145,18 +165,62 @@ LINES = {
     },
     "Hare": {
         "kickoff":  "Off at the whistle — first touch is mine!",
-        "take":     "Mine! No naps today.",
-        "leave":    "All yours, Tortoise — dropping back.",
-        "wedge":    "Two of us now — heave!",
-        "line":     "I'll race it to the line — you press!",
-        "post":     "Post covered — dig it out!",
-        "ram":      "Ram's about to fire — feeding on the bounce.",
         "goal_for": "Fast AND finished this time!",
         "goal_against": "They won't outrun us twice. Again.",
         "down":     "Legs gone — eight seconds. Yours, Tortoise!",
         "solo":     "I've got both ends till you're back up.",
     },
 }
+
+# short intent tails for the fix calls, per player, per situation
+INTENTS = {
+    "Tortoise": {"take": "mine, slow and steady", "cover": "dropping goal-side",
+                 "line": "I'll cut the line", "post": "I'm on the post",
+                 "wedge": "push with me", "ram": "I'll take the bounce",
+                 "outlet": "ahead for the break"},
+    "Hare": {"take": "mine — no naps", "cover": "dropping back",
+             "line": "racing it to the line", "post": "post covered",
+             "wedge": "heave with me", "ram": "on the bounce",
+             "outlet": "ahead for the break"},
+}
+
+# motion vocabulary: spoken by the sender, decoded by the receiver
+MOTION_AT_OURS = "rolling at our net"
+MOTION_AT_THEIRS = "rolling at their net"
+MOTION_ACROSS = "rolling across"
+MOTION_STILL = "near still"
+_FIX_RE = re.compile(r"[Bb]all at ([+-]?\d+\.?\d*), ([+-]?\d+\.?\d*)")
+
+
+def _motion_phrase(vel, asign):
+    speed = math.hypot(vel[0], vel[1])
+    if speed < 0.25:
+        return MOTION_STILL
+    fast = ", fast" if speed > 1.0 else ""
+    if vel[0] * (-asign) > 0.25:
+        return MOTION_AT_OURS + fast
+    if vel[0] * asign > 0.25:
+        return MOTION_AT_THEIRS + fast
+    return MOTION_ACROSS + fast
+
+
+def _parse_fix(msg, asign):
+    """Decode a teammate's ball call -> (xy, vel_estimate) or None."""
+    m = _FIX_RE.search(msg or "")
+    if not m:
+        return None
+    try:
+        xy = (float(m.group(1)), float(m.group(2)))
+    except ValueError:
+        return None
+    low = msg.lower()
+    mag = 1.3 if "fast" in low else 0.9
+    vel = (0.0, 0.0)
+    if MOTION_AT_OURS in low:
+        vel = (-asign * mag, 0.0)
+    elif MOTION_AT_THEIRS in low:
+        vel = (asign * mag, 0.0)
+    return xy, vel
 
 
 class FablePlayer:
@@ -185,11 +249,32 @@ class FablePlayer:
         self.score_prev = None
         self.ball_mem = None        # (xy, t) our OWN long memory, ~15 s
         self.ball_mem_t = -1e9
+        self.fix_xy = None          # teammate's radioed ball fix
+        self.fix_vel = (0.0, 0.0)
+        self.fix_t = -1e9
+        self.last_mate_msg = ""
 
     # ---------------------------------------------------------------- radio
     def _say(self, reply, key):
         line = LINES[self.name].get(key, "")
         if not line or line == self.last_line or self.t < self.say_ok_t:
+            return reply
+        reply["say"] = line
+        self.say_ok_t = self.t + SAY_GAP_S
+        self.last_line = line
+        return reply
+
+    def _say_fix(self, reply, intent, bxy, vel, asign):
+        """The v3 workhorse: an honest ball fix in plain language, with my
+        intent as the tail — the callout a sighted player owes a blind
+        teammate. 'Ball at +3.1, -2.4, rolling at our net — I'll cut the
+        line.'"""
+        if self.t < self.say_ok_t:
+            return reply
+        tail = INTENTS[self.name].get(intent) or INTENTS[self.name]["cover"]
+        line = (f"Ball at {bxy[0]:+.1f}, {bxy[1]:+.1f}, "
+                f"{_motion_phrase(vel, asign)} — {tail}.")[:120]
+        if line == self.last_line:
             return reply
         reply["say"] = line
         self.say_ok_t = self.t + SAY_GAP_S
@@ -254,9 +339,16 @@ class FablePlayer:
         if score:
             self.score_prev = dict(score)
 
-        mate_msg = (obs.get("teammate_says") or "").lower()
-        if "down" in mate_msg or "legs gone" in mate_msg:
+        mate_msg = obs.get("teammate_says") or ""
+        low_msg = mate_msg.lower()
+        if "down" in low_msg or "legs gone" in low_msg:
             self.mate_down_until = self.t + FALL_OUT_S
+        if mate_msg and mate_msg != self.last_mate_msg:
+            self.last_mate_msg = mate_msg
+            fx = _parse_fix(mate_msg, asign)
+            if fx is not None:
+                self.fix_xy, self.fix_vel = fx
+                self.fix_t = self.t
 
         mates = det.get("teammates") or []
         if mates:
@@ -314,9 +406,44 @@ class FablePlayer:
                 return self._say(reply, "kickoff")
             return reply
 
-        # -- ball unknown: hunt the LAST KNOWN point, guard the goal first --
+        # -- ball unknown: use the TEAM's knowledge, not just mine. The
+        #    teammate's radioed fix is often fresher than my own memory —
+        #    round-1-to-5 telemetry showed players spinning blind for 6-12 s
+        #    while the other player was WATCHING the ball roll in.
         if ball is None:
+            # trust a fix for a full radio cycle (cadence is 10.2 s — a 5 s
+            # window left the blind player fixless half of every cycle),
+            # and roll it forward with its spoken motion
+            fix_age = self.t - self.fix_t
+            fix_ok = fix_age < 11.0 and self.fix_xy
             mem_ok = (self.t - self.ball_mem_t) < 15.0 and self.ball_mem
+            if fix_ok and (not mem_ok or self.fix_t >= self.ball_mem_t):
+                fx_, fy_ = _roll(self.fix_xy, self.fix_vel,
+                                 min(fix_age, 4.0))
+                fx_ = _clip(fx_, -PITCH_X + 0.4, PITCH_X - 0.4)
+                fy_ = _clip(fy_, -PITCH_Y + 0.4, PITCH_Y - 0.4)
+                # if the sender's intent tail says HE has the line/post,
+                # don't double onto it — go to the ball he is calling
+                low_fix = self.last_mate_msg.lower()
+                line_covered = ("cut the line" in low_fix
+                                or "post" in low_fix)
+                if (self.fix_vel[0] * (-asign) > 0.25
+                        and not line_covered):
+                    # mate says it's rolling at OUR net: line first, look later
+                    line_pt = (ogx + asign * 0.5,
+                               _clip(fy_, -(GOAL_HALF_W - 0.1),
+                                     GOAL_HALF_W - 0.1))
+                    if _d(me, line_pt) < 0.4:
+                        reply = {"skill": "turn_to",
+                                 "target": [round(fx_, 2), round(fy_, 2)]}
+                    else:
+                        reply = self._walk(me, line_pt)
+                elif _d(me, (fx_, fy_)) > 1.4:
+                    reply = self._walk(me, (fx_, fy_))
+                else:
+                    reply = {"skill": "turn_to",
+                             "target": [round(fx_, 2), round(fy_, 2)]}
+                return self._say(reply, goal_line) if goal_line else reply
             if mem_ok:
                 mx, my_ = self.ball_mem
                 deep = asign * mx < -(PITCH_X - 3.0)
@@ -379,7 +506,10 @@ class FablePlayer:
         threat = None
         if bspeed > 0.45 and asign * bx < 0.0:
             threat = _cross_our_line(bxy, vel, ogx, asign, driven=driven)
-            if threat is not None and threat[0] > 5.0:
+            # horizon 6.5 s: a drive from midfield takes ~5-6 s to arrive,
+            # and the old 5.0 s gate threw away exactly that case (traced to
+            # concessions in m07 and m12)
+            if threat is not None and threat[0] > 6.5:
                 threat = None
 
         say_key = None
@@ -421,19 +551,42 @@ class FablePlayer:
             t_cross, y_cross = threat
             y_cross = _clip(y_cross, -(GOAL_HALF_W - 0.10), GOAL_HALF_W - 0.10)
             line_pt = (ogx + asign * 0.5, y_cross)
-            # full stride on the line race (walk_to bursts ~0.85-1.0 aligned),
-            # and a late body on the line still beats none: dribbles stall
+            # full stride on the line race (walk_to bursts ~0.85-1.0 aligned).
+            # Give up the line only when GROSSLY hopeless (>4.5 s late —
+            # drives stall between shoves, so moderately late still blocks
+            # the second phase). The old 2.5 s clause produced
+            # chase-from-behind concessions (m07 110.3/121.2, m12 525.3);
+            # NO clause at all produced passive pinning (round-6 practice,
+            # territory 102-22 against). 4.5 s is the measured middle.
             my_line = _d(me, line_pt) / 0.85
             mate_line = (_d(self.mate_xy, line_pt) / 0.85
                          if mate_known and not mate_down else 1e9)
             t_meet, meet_pt = _meet(me, bxy, vel)
-            if my_line <= mate_line and my_line < t_cross + 2.5:
-                # I take the line: be standing on the crossing point
-                if _d(me, line_pt) < 0.4:
-                    reply = {"skill": "turn_to",
-                             "target": [round(bx, 2), round(by, 2)]}
+            if my_line <= mate_line and my_line < t_cross + 4.5:
+                if t_cross < 3.0:
+                    # imminent: body ON the crossing point
+                    if _d(me, line_pt) < 0.4:
+                        reply = {"skill": "turn_to",
+                                 "target": [round(bx, 2), round(by, 2)]}
+                    else:
+                        reply = self._walk(me, line_pt, bxy)
                 else:
-                    reply = self._walk(me, line_pt, bxy)
+                    # far threat: JOCKEY goal-side on the lane, not a statue
+                    # on the line — close enough (2.2 m) to convert into the
+                    # wedge the moment the drive stalls. Statue-mode on far
+                    # threats pinned us 91-15 on territory in practice.
+                    og = (ogx, 0.0)
+                    lx, ly = og[0] - bx, og[1] - by
+                    n = math.hypot(lx, ly) or 1.0
+                    jx = _clip(bx + lx / n * 2.2, -PITCH_X + 0.6,
+                               PITCH_X - 0.6)
+                    jy = _clip(by + ly / n * 2.2, -PITCH_Y + 0.6,
+                               PITCH_Y - 0.6)
+                    if _d(me, (jx, jy)) < 0.4:
+                        reply = {"skill": "turn_to",
+                                 "target": [round(bx, 2), round(by, 2)]}
+                    else:
+                        reply = self._walk(me, (jx, jy), bxy)
                 say_key = "line"
             elif t_meet < t_cross:
                 reply = {"skill": "go_to_ball",
@@ -448,8 +601,11 @@ class FablePlayer:
                                             gx, asign, score, rem, mate_down,
                                             my_t, mate_t, their_corner)
 
-        # -- separation: never shoulder my own teammate ---------------------
-        if (not attack and mates and _d(me, self.mate_xy) < 1.1
+        # -- separation: never shoulder my own teammate — but NEVER evict a
+        #    defender from a line/post job (plug and line-racer stand close
+        #    by design; shoving one aside opens the exact gap they plug)
+        if (not attack and say_key not in ("line", "post")
+                and mates and _d(me, self.mate_xy) < 1.1
                 and _d(me, bxy) > 1.5):
             ax_, ay_ = me[0] - self.mate_xy[0], me[1] - self.mate_xy[1]
             n = math.hypot(ax_, ay_) or 1.0
@@ -472,15 +628,16 @@ class FablePlayer:
         if isinstance(tgt, list):
             reply["target"] = [round(float(tgt[0]), 2), round(float(tgt[1]), 2)]
 
-        # -- one voice line, by priority ------------------------------------
+        # -- radio: event lines keep their fable voice; EVERY other slot the
+        #    cooldown allows carries an honest ball fix + my intent. The
+        #    receiver decodes it — the radio is the team's shared eyes.
         if goal_line:
             return self._say(reply, goal_line)
         if mate_down and "down" not in self.last_line:
             return self._say(reply, "solo")
-        if say_key:
-            return self._say(reply, say_key)
-        if self.role != role_was:
-            return self._say(reply, "take" if attack else "leave")
+        if ball is not None and ball.get("seen_now"):
+            intent = say_key or ("take" if attack else "cover")
+            return self._say_fix(reply, intent, bxy, vel, asign)
         return reply
 
     # -------------------------------------------------- on the ball (duel)
@@ -568,10 +725,21 @@ class FablePlayer:
                          "target": [round(bx, 2), round(by, 2)]}, "ram")
             return (self._walk(me, spot, bxy), "ram")
 
-        # clear and present danger: engage and clear (skills aim goalward)
+        # clear and present danger: engage and clear (skills aim goalward).
+        # In OUR half a contested ball is a WEDGE call — founding-night
+        # doctrine that drifted out of the code: one dueler + one backstop
+        # loses the shove war to any two-body press (re-measured round 6:
+        # the anchor once hovered 5 cm outside the old 2.3 m radius and
+        # walked away while his mate fought 1v2).
         near_our_goal = asign * bx < -(PITCH_X - 2.6)
-        if _d(me, bxy) < 2.3 or (near_our_goal and (mate_down
-                                                    or mate_t > my_t + 1.2)):
+        contested = any(_d(o["field_xy"], bxy) < 1.0 for o in opps)
+        reach = 3.2 if (contested and asign * bx < 0.5) else 2.3
+        if _d(me, bxy) < reach or (near_our_goal and (mate_down
+                                                      or mate_t > my_t + 1.2)):
+            split = 0.8 if self.number == 1 else -0.8
+            if contested:
+                return ({"skill": "kick_toward", "target": [gx, split]},
+                        "wedge")
             return ({"skill": "go_to_ball"}, None)
 
         # we lost round 1 from 6-5 up with 43 s left: any lead in the final

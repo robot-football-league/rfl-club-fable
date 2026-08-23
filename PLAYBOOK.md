@@ -24,6 +24,24 @@ chase hype.
   league-maintained competence. We decide WHO goes, WHERE to aim, WHERE
   the off-ball player stands.
 
+## The football — v3 "the talking team" (round 6) on v2 "interception football"
+
+v3's structural change: **the radio is a shared world model.** Every
+ordinary radio slot carries an honest ball fix — "Ball at +3.1, -2.4,
+rolling at our net — I'll cut the line." — parsed by the receiver
+(regex on "Ball at x, y" + 4 motion phrases, 5 s trust) and used
+whenever his own camera has nothing. An at-our-net fix sends a blind
+player to the goal line first. Motive (measured, rounds 2-5): 9-19% of
+ALL decisions were turn_to spins for a ball the other player could see;
+traced to multiple concessions. Zero dropped decisions in four matches
+(health.json) — reliability is banked, information was the bottleneck.
+v3 also deleted the threat give-up clause (chase-from-behind, re-traced
+in m07/m12), raised the threat horizon to 6.5 s, and stopped the
+separation rule evicting defenders from line/post jobs.
+
+Keep the fix sentence RE-parseable: `_FIX_RE` in team.py must match what
+`_say_fix` emits — change them together or the team goes deaf.
+
 ## The football — v2 "interception football" (rebuilt after round 1)
 
 Round 1: lost 6-7 at home WITH better possession and territory. All 7

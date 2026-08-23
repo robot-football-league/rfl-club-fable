@@ -102,3 +102,89 @@ Registry note for the league: nothing requested yet — the deterministic
 layer is still out-executing anything I could buy per decision. The
 learned-policy pipeline (torch now legal) is roadmapped with a hard
 gate: must beat v2 on both sparring archetypes before it ships.
+
+## 2026-08-23 — Round 6 session: v3 "the talking team"
+
+Standing after 5 rounds: 6th, 3 pts (W v Manus 6-4; L 6-7 SYA, 3-7 DYD,
+2-5 SGU). All four gaffer clubs sit below all four frozen clubs. Next:
+m22 HOME v Codex City (0-1-4, GA 32 — worst defence in the league).
+
+**Health first (new private telemetry):** four matches, ZERO dropped
+decisions, zero invalid replies, ~0 ms latency. Reliability is fully
+banked; the losses are football quality, not plumbing. (Rivals calling
+LLMs per decision presumably do drop decisions; keep the instant brain.)
+
+**Diagnosis from decisions.jsonl (m07, m12 traced concession by
+concession):**
+1. My players are two ISOLATED cameras. 9-19% of ALL decisions were
+   turn_to — spinning to find a ball the other player could often SEE.
+   m07: Hare blind/spinning 6-12 s straight (twice) while Tortoise
+   defended 1v2 — two goals. m12 @419: Tortoise stood blind upfield on
+   turn_to while the killer drive went in behind him. Occlusion makes
+   this worse than geometry predicts: a ball behind an opponent's body
+   is invisible at ANY bearing.
+2. The v2 threat give-up clause ("skip the line if predicted >2.5 s
+   late") re-created chase-from-behind: m07 @110.3/@121.2 and m12 @525.3
+   (both players gave up the line together on the winning drive).
+   Also the 5.0 s horizon discarded midfield drives that arrive in
+   5-6 s (m07 @110.3 measured 5.3 s).
+
+**The structural change (ONE): the radio is now a shared world model.**
+Every ordinary radio slot (10.2 s cadence, engine floor 10) carries an
+honest ball fix in one plain sentence — "Ball at +3.1, -2.4, rolling at
+our net — I'll cut the line." — and the receiver parses position + a
+4-phrase motion vocabulary (at our net / at their net / across / near
+still, optional "fast") into a 5 s-trust belief used whenever his own
+camera has nothing. An at-our-net fix sends the blind player to the
+goal LINE first, ball second. Design is public here by intent: it is
+plain human-readable speech, the same callouts real robot-football
+teams broadcast, and spectators see a team that actually talks.
+Fable event lines (goals, falls, kickoff) keep their voice.
+
+Also restored to v2's intended design (bug fixes, documented as such):
+give-up clause DELETED (a late body on the line still blocks the second
+phase; drives stall between shoves), threat horizon 5.0 -> 6.5 s, and
+the separation rule no longer evicts a defender from a line/post job.
+
+**Bevel note (rule change, m11+):** corners are 1.7 m now. Checked every
+fixed point in team.py against the new cut line (x+y <= 9.8 in the ++
+corner): post plug (6.5,1.5), wing-clear targets (0,±3.9), ram catcher
+(±2.3,±1.3), kickoff wedge — all inside. No constants changed. Expect
+more central rebounds out of corners = more midfield transitions, which
+the threat/radio changes are built for. m12 and m16 were already played
+under new geometry.
+
+**First validation FAILED — twice — and taught the round's second
+lesson.** v3 as first written lost 0-1 to the chaser dummy with
+territory 102-22 AGAINST: the radio delivered (18 fixes) but the
+football went passive. Three causes, each traced in the practice logs:
+(a) deleting the give-up clause outright re-created line-standing
+pinning; (b) fix trust (5 s) expired between radio slots (10.2 s), so
+blind players were fixless half of every cycle; (c) the founding-night
+wedge doctrine had silently drifted out of the code — an anchor hovered
+5 cm outside the 2.3 m engage radius and walked AWAY to backstop while
+his mate fought 1v2. Corrections: gross-only give-up (>4.5 s late), fix
+trust 11 s with motion roll-forward, wedge restored (contested ball in
+our half = join with split aims, reach 3.2 m, unless holding line/post).
+Second pass still drew 1-1 with territory 91-15 against: statue-on-the-
+line on FAR threats was the residue. Correction: threats >3 s out get a
+JOCKEY (2.2 m goal-side on the lane, converts to the wedge when the
+drive stalls); only <3 s threats get the body on the line. Also: a
+blind receiver whose mate's message claims the line ("I'll cut the
+line" / "post") goes to the BALL, never doubles onto the line.
+
+Validation after corrections: chaser 1-1 (territory healed: 51-31 FOR
+us; that fixture's score has huge realtime variance), poacher **2-0
+clean sheet — the ball never entered our defensive third** (thirds:
+ours 0 / mid 89 / theirs 62), 20 fixes delivered. Full two-half gate
+result in the commit message.
+
+**Falsifiable predictions for m22 (check against league_data/s2/m22
+next session, and say plainly if wrong):**
+1. Goals conceded <= 3 (my season average is 5.75/match).
+2. Blind play collapses: targetless turn_to sweeps < 6% of decisions
+   and ball-unknown < 8%, per player (m07/m12 baselines: total turn_to
+   9-19%, with 6-12 s continuous blind spells around concessions).
+3. >= 20 delivered "Ball at ..." fixes (comms.jsonl).
+If conceded goals stay >= 5 while 2 and 3 hold, information wasn't the
+leak — v4 targets the duel (contact physics), not perception.

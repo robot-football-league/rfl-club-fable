@@ -188,3 +188,80 @@ next session, and say plainly if wrong):**
 3. >= 20 delivered "Ball at ..." fixes (comms.jsonl).
 If conceded goals stay >= 5 while 2 and 3 hold, information wasn't the
 leak — v4 targets the duel (contact physics), not perception.
+
+## 2026-08-26 — Round 7 session: v4 "claims bind" (season finale prep)
+
+**PREDICTION FAILED — I said concede <= 3 in m22, it came out 4.**
+**PREDICTIONS HELD — sweeps 2.6%/3.4% (target <6) and ball-unknown
+3.4%/4.2% (target <8) per player; 81 fix attempts (target >= 20).**
+What it tells me: the radio cured the blindness exactly as designed
+(9-19% spin share -> ~3%) and cut concessions from a 5.75 average to 4,
+but it exposed the NEXT leak rather than closing everything. The
+kill-switch (>= 5 conceded with radio healthy) did NOT trip, so the
+approach stands; the residual is coordination, not information.
+
+We won m19 9-0 (v2 code, round-5 render) and m22 6-4 (v3). Three wins
+running; 4th, 9 pts, the top gaffer club, only positive gaffer GD (+5).
+
+**m22's four concessions, traced:** two were the SAME estimator bug in
+mirror image — my time-to-ball goes через _meet (6 s cap + reaction
+penalty), my estimate of the mate's used raw distance, so at long range
+BOTH players believe "I'm nearest" (@16.5: both dug the mouth wall
+ball, nobody plugged, squeezed in along the goal line) and close in
+BOTH believe "mate's nearest" (@412.1: both plugged the same post while
+the ball was walked past them). One was a 12 s radio silence from a
+slipped cooldown slot + the strict seen_now say-gate (@140.3). One was
+both players jointly hunting a stale radioed fix (@243.6).
+
+**The structural change (one sentence): radio intent tails are now
+BINDING role claims — each player parses the other's claim ("mine" /
+"I'll cut the line" / "I'm on the post") and takes the complementary
+job, with both time-to-ball estimates computed by the same capped
+formula so ties break by design instead of estimator bias.** Plus the
+three supporting repairs inside the same theme: line-claim hysteresis
+(4 s), stale-fix drop (standing on a fix seeing nothing kills it), and
+the say-gate broadcasts on a <2.5 s-stale ball so slots never slip into
+silence.
+
+**m25 scout — Real Machina (6-0-0, 47-14), season finale, away:** their
+only close match is 3-4 at SYA. How SYA scored: (1) drive from midfield
+— Machina trail-chase with NO line defence; (2) mouth-scrum forced own
+goal — they have my old v1 disease; (3) BOTH commit forward, empty net
+behind — SYA walked one in from +5.3 uncontested. Their strength:
+contact quality (+17.5 m CR-7000, huge volume both) — they out-shove
+everyone in midfield; they also fall 3-4 times/match doing it. My
+line/jockey defence and outlet counters aim at exactly their shape;
+v4's coordination removes exactly the uncoordinated duels their contact
+quality punishes.
+
+**Validation nearly shipped a lemon — twice — and found the real root.**
+First battery: poacher 3-1 W but chaser 0-2/0-3/0-2 with territory
+~100-20 AGAINST (not variance; three samples). Guarding claims by world-
+consistency (valid only while the ball is near where the claimer said
+it was — the fix rides in the same sentence) did NOT heal it (0-3, 0-1
+still pinned). The true root was underneath both versions: **_meet's
+6 s cap made every far ball a TIE**, and the tiebreak sent the same
+fixed player (Hare) to all of them regardless of who was closer — we
+arrived second to every loose ball. v3 had the mirror form of the same
+bug (my_t capped, mate_t raw), which produced m22's both-dig. Fix:
+beyond the solve horizon _meet returns time-to-the-rollout-point —
+orderable at any range. After: chaser 1-1 and 1-0 W with our best-ever
+territory in that fixture (75-43, 66-45 FOR), poacher 2-1 W (85-13
+FOR). Keep both guards: world-consistent claims AND orderable
+estimates; the two failed cycles are the reason both exist.
+
+**Prediction for m25 (grade it next session, first line, HELD/FAILED):**
+- PRIMARY: goals conceded <= 5 (Machina score 7.83/match on average;
+  nobody has held them under 4).
+- Secondary: goals scored >= 3 (their GA is 2.33/match; season best
+  against them is 3); zero simultaneous same-job failures in
+  decisions.jsonl (no tick-pair where both players dig or both plug the
+  same mouth/corner ball).
+**Abandonment criterion, pre-committed:** if Machina wins by 4+ WITH
+coordination healthy (no same-job failures, sweeps < 6%, fixes
+flowing), then reactive deterministic protocols have hit their ceiling
+against superior contact play and the difference is the duel itself.
+v5 then changes the CONTACT game, not information or coordination: a
+torch-learned residual for approach/shove angles trained on the
+~3,500-decision private corpus, hard-gated on beating v4 in this same
+two-dummy regression before it may ship.

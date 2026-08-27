@@ -1,4 +1,26 @@
-"""AFC Fable — the first team, in one file. v3: the talking team.
+"""AFC Fable — the first team, in one file. v4: claims bind.
+
+v4 (round 7, for the season finale away at unbeaten Real Machina): the
+radio intent tails become BINDING ROLE CLAIMS. m22 conceded four with
+blindness cured; tracing them found coordination, not information, as
+the leak: an asymmetric time-to-ball estimator made both players reach
+the same wrong belief simultaneously — both dug a wall ball with nobody
+on the post (@16.5), both plugged the same post while the ball was
+walked past them (@412.1). Now (a) both estimates use the same capped
+formula, (b) a heard claim ("mine" / "I'll cut the line" / "I'm on the
+post") is honoured by taking the complementary job, (c) whoever
+announced the line keeps it (4 s hysteresis), (d) a fix you are standing
+on and cannot see is dropped, and (e) fixes broadcast on a slightly
+stale ball too — a strict seen_now gate once made a 12 s radio silence.
+
+Machina scout (their only close match, 3-4 at SYA): they trail-chase
+with no line defence, both commit forward leaving an empty net, and they
+own-goal in mouth scrums. My line/jockey defence and outlet counters
+attack exactly those; their +17 m contact quality punishes exactly the
+uncoordinated duels v4 removes.
+
+--- v3 below ---
+The talking team.
 
 Two hand-written deterministic players (RFL_RULES.md: "how you produce
 decisions is your business ... hand-written code"). Decisions are geometry
@@ -114,14 +136,20 @@ def _roll(bxy, vel, t):
 
 
 def _meet(me, bxy, vel):
-    """Earliest (t, point) where I can be where the ball will be."""
+    """Earliest (t, point) where I can be where the ball will be. Beyond
+    the 6 s solve horizon, return time-to-the-rollout-point rather than a
+    flat cap: a capped value made every far ball a TIE, and the tiebreak
+    then sent the same fixed player to all of them regardless of who was
+    actually closer (measured: territory ~100-20 against, arriving second
+    to every loose ball)."""
     t = 0.0
     while t <= 6.0:
         p = _roll(bxy, vel, t)
         if _d(me, p) <= WALK_MPS * max(0.0, t - REACT_S):
             return t, p
         t += 0.25
-    return 6.0, _roll(bxy, vel, 6.0)
+    end = _roll(bxy, vel, 6.0)
+    return REACT_S + _d(me, end) / WALK_MPS, end
 
 
 def _cross_our_line(bxy, vel, ogx, asign, driven=False):
@@ -223,6 +251,23 @@ def _parse_fix(msg, asign):
     return xy, vel
 
 
+def _parse_claim(msg):
+    """The intent tail of a call is a role CLAIM. Map it to the job the
+    speaker has taken so the listener takes the complementary one."""
+    low = (msg or "").lower()
+    if "mine" in low or "racing it" in low or "no naps" in low:
+        return "ball"
+    if "cut the line" in low:
+        return "line"
+    if "post" in low:
+        return "post"
+    if "push with me" in low or "heave" in low:
+        return "wedge"
+    if "dropping" in low or "goal-side" in low or "ahead for the break" in low:
+        return "cover"
+    return None
+
+
 class FablePlayer:
     """One robot's behaviour layer. number is the shirt (1 or 2)."""
 
@@ -253,6 +298,10 @@ class FablePlayer:
         self.fix_vel = (0.0, 0.0)
         self.fix_t = -1e9
         self.last_mate_msg = ""
+        self.mate_claim = None      # the job the mate's last call claimed
+        self.mate_claim_t = -1e9
+        self.my_claim = None        # the job my own last call claimed
+        self.my_claim_t = -1e9
 
     # ---------------------------------------------------------------- radio
     def _say(self, reply, key):
@@ -264,11 +313,15 @@ class FablePlayer:
         self.last_line = line
         return reply
 
+    CLAIM_OF_INTENT = {"take": "ball", "line": "line", "post": "post",
+                       "wedge": "wedge", "cover": "cover", "ram": "cover",
+                       "outlet": "cover"}
+
     def _say_fix(self, reply, intent, bxy, vel, asign):
         """The v3 workhorse: an honest ball fix in plain language, with my
         intent as the tail — the callout a sighted player owes a blind
-        teammate. 'Ball at +3.1, -2.4, rolling at our net — I'll cut the
-        line.'"""
+        teammate. In v4 the tail is also a binding role claim, so record
+        what I just committed to."""
         if self.t < self.say_ok_t:
             return reply
         tail = INTENTS[self.name].get(intent) or INTENTS[self.name]["cover"]
@@ -279,6 +332,8 @@ class FablePlayer:
         reply["say"] = line
         self.say_ok_t = self.t + SAY_GAP_S
         self.last_line = line
+        self.my_claim = self.CLAIM_OF_INTENT.get(intent)
+        self.my_claim_t = self.t
         return reply
 
     # ------------------------------------------------------------- helpers
@@ -349,6 +404,9 @@ class FablePlayer:
             if fx is not None:
                 self.fix_xy, self.fix_vel = fx
                 self.fix_t = self.t
+            # the intent tail is a binding role CLAIM (v4): honour it
+            self.mate_claim = _parse_claim(mate_msg)
+            self.mate_claim_t = self.t
 
         mates = det.get("teammates") or []
         if mates:
@@ -416,6 +474,13 @@ class FablePlayer:
             # and roll it forward with its spoken motion
             fix_age = self.t - self.fix_t
             fix_ok = fix_age < 11.0 and self.fix_xy
+            # I am standing where the fix says and see nothing: the fix is
+            # stale — drop it rather than orbit a ghost (m22 @243: both
+            # players hunted the same dead coordinates while the real ball
+            # was scored at the other end)
+            if fix_ok and _d(me, self.fix_xy) < 1.2:
+                self.fix_t = -1e9
+                fix_ok = False
             mem_ok = (self.t - self.ball_mem_t) < 15.0 and self.ball_mem
             if fix_ok and (not mem_ok or self.fix_t >= self.ball_mem_t):
                 fx_, fy_ = _roll(self.fix_xy, self.fix_vel,
@@ -479,21 +544,46 @@ class FablePlayer:
         opps = det.get("opponents") or []
         mate_down = self.t < self.mate_down_until
         mate_known = (self.t - self.mate_seen_t) < 6.0 and self.mate_xy
+        # v4: BOTH time-to-ball estimates go through the SAME capped formula.
+        # The old asymmetry (mine via _meet with its 6 s cap and reaction
+        # penalty, the mate's via raw distance) made both players reach the
+        # same wrong belief at once — both "nearest" at long range (m22
+        # @16.5: both dug the wall ball, nobody on the post) and both
+        # "second" close in (m22 @412.1: both plugged the same post while
+        # the ball was walked past them).
         my_t = _meet(me, bxy, vel)[0]
         if mate_down:
             mate_t = 1e9
         elif mate_known:
-            mate_t = _d(self.mate_xy, bxy) / WALK_MPS
+            mate_t = _meet(self.mate_xy, bxy, vel)[0]
         else:
             mate_t = my_t + (0.001 if not self.attack_biased else -0.001)
+        # a radio claim is BINDING — but only while the WORLD still matches
+        # it: the claim rode in with a ball fix, so it is valid only while
+        # the ball remains near where the claimer said it was. Wall-time
+        # freshness alone froze us against swarms (three straight practice
+        # losses, territory ~100-20 against): the ball's situation turns
+        # over every 2-3 s there, and honouring a 6 s-old "mine" meant
+        # backing off loose balls nobody owned any more.
+        claim_fresh = ((self.t - self.mate_claim_t) < 5.0
+                       and self.fix_xy is not None
+                       and _d(bxy, self.fix_xy) < 2.5)
         bias = -0.45 if self.role == "attack" else 0.45
-        if abs(my_t - mate_t) < 0.25:
+        if claim_fresh and self.mate_claim == "ball" and _d(me, bxy) > 1.2:
+            attack = False
+        elif claim_fresh and self.mate_claim in ("cover", "line", "post"):
+            attack = True
+        elif abs(my_t - mate_t) < 0.25:
             attack = self.attack_biased
         else:
             attack = (my_t + bias) < mate_t
         role_was = self.role
         self.role = "attack" if attack else "cover"
         i_am_near = my_t <= mate_t
+        if claim_fresh and self.mate_claim == "ball" and _d(me, bxy) > 1.2:
+            i_am_near = False               # he took the ball: I take the post
+        elif claim_fresh and self.mate_claim == "post":
+            i_am_near = True                # he took the post: I dig
 
         our_mouth = (asign * bx < -(PITCH_X - 1.6)
                      and abs(by) <= GOAL_HALF_W + 0.4)
@@ -562,7 +652,14 @@ class FablePlayer:
             mate_line = (_d(self.mate_xy, line_pt) / 0.85
                          if mate_known and not mate_down else 1e9)
             t_meet, meet_pt = _meet(me, bxy, vel)
-            if my_line <= mate_line and my_line < t_cross + 4.5:
+            # claim hysteresis: whoever ANNOUNCED the line keeps it for a
+            # few seconds — two players flip-flopping the line job between
+            # slots is how nobody ends up on it
+            i_claimed_line = (self.my_claim == "line"
+                              and (self.t - self.my_claim_t) < 4.0)
+            mate_claimed_line = (claim_fresh and self.mate_claim == "line")
+            if ((my_line <= mate_line or i_claimed_line)
+                    and not mate_claimed_line and my_line < t_cross + 4.5):
                 if t_cross < 3.0:
                     # imminent: body ON the crossing point
                     if _d(me, line_pt) < 0.4:
@@ -635,7 +732,10 @@ class FablePlayer:
             return self._say(reply, goal_line)
         if mate_down and "down" not in self.last_line:
             return self._say(reply, "solo")
-        if ball is not None and ball.get("seen_now"):
+        # broadcast on a slightly stale ball too (age < 2.5): a strict
+        # seen_now gate once turned a slipped cooldown slot into a 12 s
+        # radio silence while the ball crossed the pitch (m22 @140)
+        if ball is not None and float(ball.get("age_s", 9.0)) < 2.5:
             intent = say_key or ("take" if attack else "cover")
             return self._say_fix(reply, intent, bxy, vel, asign)
         return reply

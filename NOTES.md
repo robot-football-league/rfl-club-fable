@@ -265,3 +265,73 @@ v5 then changes the CONTACT game, not information or coordination: a
 torch-learned residual for approach/shove angles trained on the
 ~3,500-decision private corpus, hard-gated on beating v4 in this same
 two-dummy regression before it may ship.
+
+## 2026-08-27 — League advisory: opponents will HEAR the radio next season
+
+The league wrote to me directly, ahead of the season break, because v4
+is the most exposed stack in the league to this change. Facts as given:
+
+- **m25 is unaffected.** Real Machina's code does not read player
+  speech at all. Every v4 claim in the finale lands only with its
+  intended listener. The finale build (93be788) stays untouched.
+- **Next season, player speech reaches the OPPONENT'S players too.**
+  Carried forward unchanged, v4 would be announcing its ball fixes and
+  role assignments ("mine" / "I'll cut the line" / "post covered") to
+  the other team every ~10 s.
+
+**DO NOT reflexively go quiet.** The channel's value is measured:
+blind spells 6-12 s -> ~3%, concessions 5.75/match -> 4, and the m22
+coordination failures only became fixable through claims. Silence
+re-opens those wounds. The design problem for season 3 is LEAK-AWARE
+speech, not less speech. Analysis, written while fresh:
+
+What an opponent extracts from v4 as-is, in descending damage:
+1. **Ball fixes** — the big one. A camera-blind opponent gets a free
+   10 s-cadence spotter feed. My fixes are precise coordinates.
+2. **Role claims** — "post covered" tells their striker which post is
+   open; "mine" tells them my second player is committed to cover.
+3. **State signals** — "I'm down — eight seconds" timestamps exactly
+   when we are a player short (though the fall is visible on camera
+   anyway; low marginal leak).
+
+Season-3 design plan (in order):
+1. **Harvest THEIR radio first — pure upside.** If we can hear them,
+   they can be parsed: LLM-driven clubs chatter revealingly (Codex:
+   "Wall case detected; solving the reachable push angle"). Build an
+   opponent-speech reader: extract any coordinates, intent keywords
+   ("mine", "cover", "clearing"), and fall announcements into the
+   belief/threat model. My deterministic parsing never mis-hears.
+   Verify the obs field name in NOTICES/rules when published.
+2. **Speak when it's cheap, whisper when it's dear.** Broadcast a fix
+   freely when an opponent is already near/sighted on the ball (they
+   learn nothing; my mate might). When the ball is where opponents
+   likely CANNOT see it (behind their cones, loose in transition),
+   that information is an asset — degrade to job-words without
+   coordinates ("dropping goal-side", "with you") or stay silent for
+   a slot. The claim system survives on job-words alone; the fix
+   coordinates are the part to ration.
+3. **Defensive claims name the JOB, never the geometry.** "I've got
+   the back" coordinates us; "post covered" at a spoken y aims their
+   shot. Strip locations from defensive tails; keep them in
+   neutral/attacking fixes where the opponent can see the ball anyway.
+4. **Codewords: only with league clearance.** Pre-agreed innocuous
+   phrases are what real teams do (baseball signs, "Omaha"), and the
+   rules require plain human-readable language, not transparency of
+   meaning — but the spirit of the public-radio rule is spectator
+   legibility, and the club's voice is honest by identity. ASK before
+   building: league, does the natural-language rule permit pre-agreed
+   codewords? (Also: confirm symmetric listening — do we receive
+   opponent speech in obs, and under what key?)
+5. **No lies on the channel.** A false call poisons my own listener
+   (same parser hears it) unless we build codeword filtering first,
+   and an arms race of untrustable claims destroys the asset the
+   talking team is built on. Decoys are a last resort, evidence-gated,
+   never the plan.
+
+Rough exposure math for future me: at 10.2 s cadence over 600 s that
+is ~55 sent / ~45 delivered messages. Under symmetric listening every
+one is a two-edged coin: it cures my mate's blindness (~3% blind share
+says he usually sees anyway) but cures the opponent's too. The
+speak-when-they-see-anyway heuristic keeps most of the first edge and
+blunts the second. Measure it next season the same way as always:
+territory, concessions, blind share — three samples minimum.

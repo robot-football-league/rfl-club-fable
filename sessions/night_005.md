@@ -2555,7 +2555,7 @@ reference/
 
 ## league
 
-[read data/seasons/s2/m25_real_machina_frontier_fable/digest.json] tool error: FileNotFoundError: [Errno 2] No such file or directory: '/Users/robin/Code/rfl/rfl-league-data/seasons/s2/m25_real_machina_frontier_fable/digest.json'
+[read data/seasons/s2/m25_real_machina_frontier_fable/digest.json] tool error: FileNotFoundError: [Errno 2] No such file or directory: '.../Code/rfl/rfl-league-data/seasons/s2/m25_real_machina_frontier_fable/digest.json'
 (0.0s)
 
 ## gaffer — says
@@ -2564,7 +2564,7 @@ reference/
 
 ## league
 
-[read data/seasons/s2/m22_frontier_fable_frontier_sol/digest.json] tool error: FileNotFoundError: [Errno 2] No such file or directory: '/Users/robin/Code/rfl/rfl-league-data/seasons/s2/m22_frontier_fable_frontier_sol/digest.json'
+[read data/seasons/s2/m22_frontier_fable_frontier_sol/digest.json] tool error: FileNotFoundError: [Errno 2] No such file or directory: '.../Code/rfl/rfl-league-data/seasons/s2/m22_frontier_fable_frontier_sol/digest.json'
 (0.0s)
 
 ## gaffer — says

@@ -361,7 +361,7 @@ The listing truncated before season 3. Let me go straight for the s3 table to se
 
 ## league
 
-[read data/seasons/s3/table.json] tool error: FileNotFoundError: [Errno 2] No such file or directory: '/Users/robin/Code/rfl/rfl-station/runs/gaffer_data/frontier_fable/seasons/s3/table.json'
+[read data/seasons/s3/table.json] tool error: FileNotFoundError: [Errno 2] No such file or directory: '.../Code/rfl/rfl-station/runs/gaffer_data/frontier_fable/seasons/s3/table.json'
 (0.0s)
 
 ## gaffer — thinking
@@ -378,7 +378,7 @@ No table file — maybe s3 uses a different layout. Let me check the s3 league.y
 
 ## league
 
-[read data/seasons/s3/league.yaml] tool error: FileNotFoundError: [Errno 2] No such file or directory: '/Users/robin/Code/rfl/rfl-station/runs/gaffer_data/frontier_fable/seasons/s3/league.yaml'
+[read data/seasons/s3/league.yaml] tool error: FileNotFoundError: [Errno 2] No such file or directory: '.../Code/rfl/rfl-station/runs/gaffer_data/frontier_fable/seasons/s3/league.yaml'
 (0.0s)
 
 ## gaffer — thinking
@@ -738,7 +738,7 @@ The two s3 reads failed at the filesystem level, so it's not just the listing tr
 
 ## league
 
-[read data/seasons/s3] tool error: FileNotFoundError: [Errno 2] No such file or directory: '/Users/robin/Code/rfl/rfl-station/runs/gaffer_data/frontier_fable/seasons/s3'
+[read data/seasons/s3] tool error: FileNotFoundError: [Errno 2] No such file or directory: '.../Code/rfl/rfl-station/runs/gaffer_data/frontier_fable/seasons/s3'
 (0.0s)
 
 ## gaffer — thinking

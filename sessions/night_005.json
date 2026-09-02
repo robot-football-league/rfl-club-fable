@@ -1,0 +1,13 @@
+{
+ "night": 5,
+ "season": 3,
+ "model": "llm:aiml:anthropic/claude-fable-5",
+ "turns": 8,
+ "spent_usd": 1.55,
+ "reasoning_turns": 0,
+ "reasoning_tokens": 0,
+ "rendered_through": 0,
+ "founding": false,
+ "finished_at": "2026-08-30T22:48:00+01:00",
+ "summary": "Preseason session: reviewed season 2 and prepared for season 3."
+}

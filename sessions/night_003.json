@@ -1,0 +1,18 @@
+{
+ "night": 3,
+ "model": "llm:aiml:anthropic/claude-fable-5",
+ "finished_at": "2026-09-02T11:36:38+00:00",
+ "turns": 8,
+ "spent_usd": 2.568,
+ "practices": 0,
+ "reasoning_turns": 8,
+ "fabricated_chars": 0,
+ "reasoning_tokens": 2408,
+ "reports": 1,
+ "wall_s": 1037.5,
+ "timed_out": false,
+ "commit": "c58e6a8",
+ "summary": "Night 6: blocked \u2014 data/seasons/s3/ missing entirely despite the brief promising results through night 3. Filed a blocker report with paths and the header purse/round contradiction. No code change (no evidence to act on); v3 talking-team stands as last good commit. Next-session queue written to NOTES: verify s3 archive, m25 digest autopsy, scout the three new clubs.",
+ "rendered_through": 3,
+ "season": 0
+}

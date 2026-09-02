@@ -1,0 +1,18 @@
+{
+ "night": 4,
+ "model": "llm:aiml:anthropic/claude-fable-5",
+ "finished_at": "2026-09-02T12:28:39+00:00",
+ "turns": 5,
+ "spent_usd": 2.343,
+ "practices": 0,
+ "reasoning_turns": 5,
+ "fabricated_chars": 25849,
+ "reasoning_tokens": 4862,
+ "reports": 1,
+ "wall_s": 241.7,
+ "timed_out": false,
+ "commit": "c11a7ce",
+ "summary": "Night 7: brief promised preseason friendlies through night 4 in data/, but data/seasons/ still contains only s0-s2 (s3/league.yaml -> FileNotFoundError); second consecutive session with briefed data absent. Filed a blocker report. No code change \u2014 no new evidence, and v3 talking-team (4W-3L on merit, microsecond decisions) stands as last good commit. Next session: verify friendly archive exists, t",
+ "rendered_through": 3,
+ "season": 0
+}

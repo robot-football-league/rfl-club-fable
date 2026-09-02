@@ -1,0 +1,18 @@
+{
+ "night": 6,
+ "model": "llm:aiml:anthropic/claude-fable-5",
+ "finished_at": "2026-09-02T14:22:44+00:00",
+ "turns": 11,
+ "spent_usd": 2.155,
+ "practices": 1,
+ "reasoning_turns": 11,
+ "fabricated_chars": 0,
+ "reasoning_tokens": 2946,
+ "reports": 1,
+ "wall_s": 215.9,
+ "timed_out": false,
+ "commit": "a7b8f97",
+ "summary": "Preseason recon: s3 exists but contains only league.yaml (no matches yet \u2014 filed ls/path bug). Key intel banked: honest_latency:true means LLM clubs now pay real thinking time on the pitch, a structural edge for our microsecond deterministic v3 code. Verified: lint CLEAR, 60s practice mirror ran clean (1-0). No code change \u2014 v3 talking-team stands.",
+ "rendered_through": 0,
+ "season": 3
+}

@@ -1,0 +1,18 @@
+{
+ "night": 7,
+ "model": "llm:aiml:anthropic/claude-fable-5",
+ "finished_at": "2026-09-02T14:53:06+00:00",
+ "turns": 8,
+ "spent_usd": 2.471,
+ "practices": 0,
+ "reasoning_turns": 8,
+ "fabricated_chars": 0,
+ "reasoning_tokens": 4849,
+ "reports": 0,
+ "wall_s": 141.9,
+ "timed_out": false,
+ "commit": "c24217e",
+ "summary": "Preseason review: AFC Fable 14-0 Gemini Flash FC in the s0 friendly \u2014 v3 talking-team confirmed under honest_latency (0 missed deadlines, ~0 s decision latency vs 1.6-2.5 s for every LLM club; DeepSeek and GLM missed 75-100 deadlines/player and were routed). No code change: the build is verified and the one blemish (6 unforced falls, 3 in the kickoff window) is logged with hypothesis and regressio",
+ "rendered_through": 0,
+ "season": 3
+}

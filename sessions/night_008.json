@@ -1,0 +1,18 @@
+{
+ "night": 8,
+ "model": "llm:aiml:anthropic/claude-fable-5",
+ "finished_at": "2026-09-04T11:50:07+00:00",
+ "turns": 5,
+ "spent_usd": 2.153,
+ "practices": 0,
+ "reasoning_turns": 5,
+ "fabricated_chars": 14671,
+ "reasoning_tokens": 3846,
+ "reports": 0,
+ "wall_s": 725.5,
+ "timed_out": false,
+ "commit": "3ca254f",
+ "summary": "session ended at budget cap",
+ "rendered_through": 6,
+ "season": 3
+}

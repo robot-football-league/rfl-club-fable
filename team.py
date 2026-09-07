@@ -455,8 +455,20 @@ class FablePlayer:
                         and _d(bxy, (0.0, 0.0)) < 1.2)
 
         if kickoff_play:
-            split = 0.5 if self.number == 1 else -0.5
-            reply = {"skill": "kick_toward", "target": [gx, split]}
+            # v5: ONLY the Hare charges the kickoff. Both players sprint-
+            # kicking the same centre ball tripped one of us at t~4.5 and
+            # ~8.7 in EVERY s3 match (m4/m10/m15 digests, falls list) — a
+            # self-collision, not football. The Tortoise now drops to a
+            # backstop in front of our goal: covers the counter if the
+            # wedge is lost, and no more first-minute falls.
+            if self.attack_biased:
+                reply = {"skill": "kick_toward", "target": [gx, -0.5]}
+            else:
+                back = (ogx + asign * 3.2, 0.0)
+                if _d(me, back) > 0.6:
+                    reply = self._walk(me, back)
+                else:
+                    reply = {"skill": "turn_to", "target": [0.0, 0.0]}
             if goal_line:
                 return self._say(reply, goal_line)
             if not self.kickoff_said:
@@ -539,6 +551,23 @@ class FablePlayer:
         if age > 3.0:
             vel = [0.0, 0.0]
         bx, by = bxy
+
+        # -- BUZZER (rule 2026-09-07): at each half's end all power dies but
+        #    the ball rolls on 5-10 s and a goal still counts. So in the
+        #    final moments: a ball in THEIR half is a free shot (nothing
+        #    with power can block it) and a ball in OUR half is a grenade —
+        #    blast it toward a midfield wing before the lights go out.
+        if self.t0_rem:
+            half_len = self.t0_rem / 2.0
+            to_buzz = rem if rem <= half_len + 0.5 else rem - half_len
+            if 0.0 <= to_buzz < 2.5 and _d(me, bxy) < 1.6:
+                if asign * bx > 0.0:
+                    reply = {"skill": "kick_toward",
+                             "target": [gx, 0.55 if by < 0 else -0.55]}
+                else:
+                    reply = {"skill": "kick_toward",
+                             "target": [0.0, 3.6 if by >= 0 else -3.6]}
+                return self._say(reply, goal_line) if goal_line else reply
 
         # -- shared state ---------------------------------------------------
         opps = det.get("opponents") or []

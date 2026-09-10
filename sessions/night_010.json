@@ -1,0 +1,20 @@
+{
+ "night": 10,
+ "model": "llm:anthropic:claude-fable-5",
+ "finished_at": "2026-09-07T16:14:36+00:00",
+ "turns": 16,
+ "spent_usd": 2.236,
+ "practices": 1,
+ "reasoning_turns": 0,
+ "fabricated_chars": 0,
+ "reasoning_tokens": 0,
+ "reports": 0,
+ "wall_s": 377.7,
+ "timed_out": false,
+ "sit_out_rounds": 1,
+ "code_changed": true,
+ "commit": "fceb339",
+ "summary": "v5: kickoff de-collision (only Hare charges the centre ball, Tortoise drops to a backstop) \u2014 fixes the unforced falls at t~4.5/~8.7 seen in ALL three s3 matches; plus a buzzer-rule override (last 2.5s of a half: shoot on sight in their half, blast clear in ours) for the 2026-09-07 rule change. Lint clear, 90s practice mirror ran clean.",
+ "rendered_through": 16,
+ "season": 3
+}
